@@ -1,0 +1,9 @@
+Charter Agreement Signer
+Copyright 2026 BaseLabs
+
+This product includes software developed by BaseLabs
+(https://github.com/baselabs).
+
+This product depends on the charter_agreement_protocol package
+(https://github.com/baselabs/charter_agreement_protocol), also licensed under
+the Apache License, Version 2.0.

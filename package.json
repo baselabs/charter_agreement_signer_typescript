@@ -1,0 +1,45 @@
+{
+  "name": "@charter-agreement-protocol/signer",
+  "version": "0.1.0",
+  "description": "Holder-side companion signer for the Charter Agreement Protocol (CAP) in TypeScript — atomic key snapshots, honest-signer refusals, external-signature assembly, and post-sign verification through the @charter-agreement-protocol/verifier. CAP verifies; it never authorizes; this signer signs, it never verifies third-party artifacts or takes custody.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.8.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types --no-warnings signer.test.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@charter-agreement-protocol/verifier": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "typescript": "~5.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baselabs/charter_agreement_signer_typescript.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
