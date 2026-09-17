@@ -47,7 +47,7 @@ export type SignError =
   | { error: "verification_failed" };
 
 export type SignOk<T> = { ok: true; result: T };
-export type SignResult<T> = SignOk<T | never> | ({ ok: false } & SignError);
+export type SignResult<T> = SignOk<T> | ({ ok: false } & SignError);
 
 export type ChainView = {
   revisions: string[];

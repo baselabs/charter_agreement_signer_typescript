@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 24
 
-      # No lockfile yet: the verifier ^0.3.0 dependency (the refusal surface)
+      # No lockfile yet: the verifier ^0.4.0 dependency (the producer surface)
       # resolves from the registry once its staged release is approved. The
       # lockfile + frozen install land with the first green run after that
       # approval.

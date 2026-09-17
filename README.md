@@ -90,13 +90,33 @@ rejected pre-sign as `"invalid_input"` through the verifier package's
 producer claims gate — they never burn a key operation. A signing failure is
 never a silent pass.
 
+## The sibling signer
+
+This package is one of two independent TypeScript siblings implementing the
+Charter Agreement Protocol — no Elixir code or dependency at runtime; the
+Elixir reference is the certification oracle (the vendored corpus is
+certified against it, and its CI cross-verifies TypeScript-signed artifacts
+from raw bytes).
+
+- **This package** — `@charter-agreement-protocol/verifier`: verification
+  and the pure producer surface (signing inputs, refusal guards, assembly).
+- [`@charter-agreement-protocol/signer`](https://www.npmjs.com/package/@charter-agreement-protocol/signer)
+  — the holder-side companion: key custody, the wrong-key guard, and
+  post-sign verification, delegating all protocol logic here.
+
+The pair releases together: the signer depends on this package (`^0.4.0`),
+so a verifier release stages first and the signer locks and releases
+against the published version immediately after.
+
 ## Evidence
 
 - The Elixir reference repository's gate verifies TypeScript-signed
   artifacts from raw bytes (cross-implementation agreement, enforced in CI).
-- Framing, refusal guards, and assembly are the verifier package's producer
-  surface (0.4.0) — the same single implementation the independent verifier
-  certifies; this package contains no protocol logic of its own.
+- Framing, the producer claims gate, refusal guards, and assembly are the
+  verifier package's producer surface (0.4.0) — the same single
+  implementation the independent verifier certifies. What remains here is
+  custody plus input policing: the issuing-view discipline composes the
+  verifier's own `verifyChain`, never a local reimplementation.
 - Post-sign verification goes through the
   [@charter-agreement-protocol/verifier](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
   package — the certified dual-implementation-verified verifier.

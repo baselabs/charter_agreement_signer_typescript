@@ -1,7 +1,7 @@
 // CAP never authorizes.
 //
-// Signer tests: a raw test key handle (Ed25519 from a deterministic seed and
-// an ML-DSA-65 handle) exercises the full custody path per artifact kind —
+// Signer tests: raw test key handles (Ed25519 from deterministic seeds)
+// exercise the full custody path per artifact kind —
 // snapshot → producer (provisional framing + refusals) → sign → wrong-key
 // guard → assemble → post-sign verify through the verifier package. The
 // Elixir-repo gate separately proves these TS-signed artifacts verify under
@@ -636,4 +636,19 @@ test("a post-sign verification failure is its own discipline: verification_faile
   });
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "verification_failed");
+});
+
+test("view-shape defects outrank claims defects (the reference function head)", async () => {
+  // The reference producer's function head rejects a malformed set before
+  // build: a missing view object wins over a claims defect. Both land in
+  // invalid_input; this pins WHICH code.
+  const spy = spyHandle();
+  const claimsBadAndViewMissing = await signAcceptance(
+    { ...world.genesisIssuerClaims, revision_number: 2 } as Record<string, unknown>,
+    spy.handle,
+    undefined as never,
+  );
+  assert.ok(!claimsBadAndViewMissing.ok);
+  assert.equal((claimsBadAndViewMissing as { code?: string }).code, "signing_input_invalid");
+  assert.equal(spy.touches(), 0);
 });
