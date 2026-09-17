@@ -8,14 +8,14 @@ Holder-side companion signer for the
 **CAP verifies; it never authorizes. This signer signs; it never takes
 custody.** You keep the key (HSM, OS keychain, key server) behind a handle
 object with two callbacks; the signer resolves ONE atomic `keyIdentity`
-snapshot, builds the exact RFC 7515 signing input, runs the honest-signer
-refusal guards (R1–R3: claims-truth, no-equivocation, ancestry/governing
-coverage — through the verifier package's refusal surface) **before the key
-signs**, checks the returned signature
-against the snapshot's public key (the wrong-key guard), assembles the
-compact, and post-sign-verifies the assembled artifact through the
-`@charter-agreement-protocol/verifier` package — exactly one verification
-implementation.
+snapshot, then delegates EVERYTHING pure to the verifier package's producer
+surface — the exact RFC 7515 signing input, the producer claims gate, the
+R1–R3 honest-signer refusal guards (claims-truth, no-equivocation,
+ancestry/governing coverage), and assembly — **before the key signs**, with
+exactly one implementation. What stays here is custody: the sign callback,
+the wrong-key guard against the snapshot's public key, and the post-sign
+verification of the assembled artifact through the
+`@charter-agreement-protocol/verifier` package.
 
 ## Install
 
@@ -94,6 +94,9 @@ never a silent pass.
 
 - The Elixir reference repository's gate verifies TypeScript-signed
   artifacts from raw bytes (cross-implementation agreement, enforced in CI).
+- Framing, refusal guards, and assembly are the verifier package's producer
+  surface (0.4.0) — the same single implementation the independent verifier
+  certifies; this package contains no protocol logic of its own.
 - Post-sign verification goes through the
   [@charter-agreement-protocol/verifier](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
   package — the certified dual-implementation-verified verifier.
