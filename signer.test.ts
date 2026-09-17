@@ -6,15 +6,24 @@
 // guard → assemble → post-sign verify through the verifier package. The
 // Elixir-repo gate separately proves these TS-signed artifacts verify under
 // the Elixir reference implementation.
-import test from "node:test";
 import assert from "node:assert/strict";
 import { createPrivateKey, createPublicKey, sign as nodeSign } from "node:crypto";
+import { before, test } from "node:test";
 import {
+  signAcceptance,
   signDescriptor,
   signReceipt,
+  signTermination,
+  type ChainView,
   type KeyHandle,
 } from "./signer.ts";
-import { verifyDescriptor, verifySignature } from "@charter-agreement-protocol/verifier";
+import {
+  verifyAcceptance,
+  verifyChain,
+  verifyDescriptor,
+  verifySignature,
+  verifyTermination,
+} from "@charter-agreement-protocol/verifier";
 
 // Deterministic Ed25519 from a 32-byte seed (PKCS#8 prefix + seed).
 function ed25519FromSeed(seed: Buffer) {
@@ -157,17 +166,6 @@ test("signReceipt round-trips without a chain context (revision-only posture)", 
 // cases run with a spy handle whose sign() must never be reached.
 // ---------------------------------------------------------------------------
 
-import { before } from "node:test";
-import {
-  signAcceptance,
-  signTermination,
-  type ChainView,
-} from "./signer.ts";
-import {
-  verifyAcceptance,
-  verifyChain,
-  verifyTermination,
-} from "@charter-agreement-protocol/verifier";
 
 type Party = { handle: unknown; descriptor: string; pdd: string };
 
@@ -399,7 +397,7 @@ test("signAcceptance: R2 equivocation at an occupied revision number is refused"
   assert.equal(spy.touches(), 0);
 });
 
-test("signAcceptance: R3 re-accepting genesis on a forked view is refused", async () => {
+test("signAcceptance: R3 re-accepting a non-head revision is refused (uncovered head)", async () => {
   const spy = spyHandle();
   const result = await signAcceptance(world.genesisIssuerClaims, spy.handle, {
     revisionText: world.genesisText,
@@ -506,4 +504,28 @@ test("signAcceptance: happy path re-accepting the governing successor, post-veri
   assert.ok(result.ok, JSON.stringify(result));
   const verified = verifyAcceptance(result.result.acceptance, world.successorText, [world.issuer.descriptor]);
   assert.ok(verified.ok, JSON.stringify(verified));
+});
+
+test("a 0.1.x-shaped termination view (no chain) fails closed, never throws", async () => {
+  const spy = spyHandle();
+  const result = await signTermination(
+    {
+      protocol_revision: 2,
+      charter_id: world.genesisDigest,
+      governing_revision_digest: world.genesisDigest,
+      party_descriptor_digest: world.issuer.pdd,
+      party_role: "issuer",
+      reason_code: "mutual",
+      issued_at: "2026-08-25T14:00:00Z",
+      effective_at: "2026-08-25T15:00:00Z",
+      extensions: { critical: {}, optional: {} },
+    },
+    spy.handle,
+    // The pre-0.2.0 view shape: no chain member.
+    { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor] } as never,
+  );
+  assert.ok(!result.ok);
+  assert.equal((result as { error: string }).error, "invalid_input");
+  assert.equal((result as { code?: string }).code, "signing_input_invalid");
+  assert.equal(spy.touches(), 0);
 });

@@ -78,8 +78,9 @@ descriptors, terminations }`) the refusal guards verify and bind against.
 
 Errors are closed: `{ ok: false, error: "invalid_handle" \| "signing_failed"
 \| "invalid_input" \| "refused", code? }`. `"refused"` is the honest-signer
-refusal: the claims contradict the caller's own verified view, and the key
-is never touched. A signing failure is never a
+refusal: the claims contradict the caller's own verified view, and the
+handle's `sign` callback is never reached (the atomic `keyIdentity` snapshot
+resolves first — the reference ordering). A signing failure is never a
 silent pass.
 
 ## Evidence
@@ -92,9 +93,11 @@ silent pass.
 
 ## SemVer
 
-Package SemVer decoupled from the protocol's `protocol_revision`; a package
-major is owed only when a shipped public API is removed or changes
-behavior.
+Package SemVer decoupled from the protocol's `protocol_revision`. While the
+package is below 1.0, breaking public-API changes land in minor versions and
+are named in the commit message (0.2.0 is one: `signTermination`'s view
+requires `chain`); a package major is owed only when a shipped public API is
+removed or changes behavior at or above 1.0.
 
 ## License
 
