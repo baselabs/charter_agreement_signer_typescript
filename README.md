@@ -29,11 +29,15 @@ Requires Node >= 24.8 (ML-DSA support in the Node builtins).
 
 ```js
 import { signDescriptor } from "@charter-agreement-protocol/signer";
+import { generateKeyPairSync } from "node:crypto";
+
+const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+const publicKeyBase64url = publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("base64url");
 
 const handle = {
   // ONE atomic snapshot — the kid and public key cannot disagree.
   keyIdentity() {
-    return { kid: "my-key-001", publicKey }; // base64url raw public key
+    return { kid: "my-key-001", publicKey: publicKeyBase64url }; // base64url raw public key
   },
   // The holder's job: sign the exact message bytes with the held key.
   sign(message) {
@@ -46,7 +50,7 @@ const result = await signDescriptor(
     protocol_revision: 2,
     descriptor_number: 1,
     verification_keys: [
-      { key_id: "my-key-001", algorithm: "Ed25519", public_key: publicKey, status: "active" },
+      { key_id: "my-key-001", algorithm: "Ed25519", public_key: publicKeyBase64url, status: "active" },
     ],
     attestation_hints: [],
     extensions: { critical: {}, optional: {} },
@@ -90,21 +94,22 @@ rejected pre-sign as `"invalid_input"` through the verifier package's
 producer claims gate — they never burn a key operation. A signing failure is
 never a silent pass.
 
-## The sibling signer
+## The sibling verifier
 
 This package is one of two independent TypeScript siblings implementing the
 Charter Agreement Protocol — no Elixir code or dependency at runtime; the
-Elixir reference is the certification oracle (the vendored corpus is
-certified against it, and its CI cross-verifies TypeScript-signed artifacts
-from raw bytes).
+Elixir reference is the certification oracle (the verifier's vendored
+corpus is certified against it, and its CI cross-verifies
+TypeScript-signed artifacts from raw bytes).
 
-- **This package** — `@charter-agreement-protocol/verifier`: verification
-  and the pure producer surface (signing inputs, refusal guards, assembly).
-- [`@charter-agreement-protocol/signer`](https://www.npmjs.com/package/@charter-agreement-protocol/signer)
-  — the holder-side companion: key custody, the wrong-key guard, and
-  post-sign verification, delegating all protocol logic here.
+- **This package** — `@charter-agreement-protocol/signer`: key custody,
+  the wrong-key guard, post-sign verification, and the closed error
+  vocabulary — all protocol logic delegated to the verifier.
+- [`@charter-agreement-protocol/verifier`](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
+  — verification and the pure producer surface (signing inputs, claims
+  gate, refusal guards, assembly) that this package signs through.
 
-The pair releases together: the signer depends on this package (`^0.4.0`),
+The pair releases together: this package depends on the verifier (`^0.4.0`),
 so a verifier release stages first and the signer locks and releases
 against the published version immediately after.
 

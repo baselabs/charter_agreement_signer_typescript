@@ -1,9 +1,9 @@
-Charter Agreement Signer
+Charter Agreement Signer (TypeScript)
 Copyright 2026 BaseLabs
 
 This product includes software developed by BaseLabs
 (https://github.com/baselabs).
 
-This product depends on the charter_agreement_protocol package
-(https://github.com/baselabs/charter_agreement_protocol), also licensed under
-the Apache License, Version 2.0.
+This product depends on the @charter-agreement-protocol/verifier package
+(https://github.com/baselabs/charter_agreement_protocol_typescript), also
+licensed under the Apache License, Version 2.0.
