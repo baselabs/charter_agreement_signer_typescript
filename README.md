@@ -67,7 +67,7 @@ empty context — your handle signs the exact message bytes as with Ed25519).
 | Export | What it does |
 |---|---|
 | `signDescriptor(claims, handle, opts?)` | Signs one Party Descriptor; post-verified via `verifyDescriptor` |
-| `signReceipt(claims, handle, chain \| null, opts?)` | Signs one Receipt; post-verified via `verifyReceipt` when a chain view is supplied |
+| `signReceipt(claims, handle, chain, opts?)` | Signs one Receipt against the required issuing view; post-verified via `verifyReceipt` (the reference takes a context, never none) |
 | `signAcceptance(claims, handle, view, opts?)` | Signs one Acceptance against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
 | `signTermination(claims, handle, view, opts?)` | Signs one Termination against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
 
@@ -77,11 +77,16 @@ chain, and the caller's full `ChainView` (`{ revisions, acceptances,
 descriptors, terminations }`) the refusal guards verify and bind against.
 
 Errors are closed: `{ ok: false, error: "invalid_handle" \| "signing_failed"
-\| "invalid_input" \| "refused", code? }`. `"refused"` is the honest-signer
-refusal: the claims contradict the caller's own verified view, and the
-handle's `sign` callback is never reached (the atomic `keyIdentity` snapshot
-resolves first — the reference ordering). A signing failure is never a
-silent pass.
+\| "invalid_input" \| "refused" \| "verification_failed", code? }`.
+`"refused"` is the honest-signer refusal: the claims contradict the caller's
+own verified view, and the handle's `sign` callback is never reached (the
+atomic `keyIdentity` snapshot resolves first — the reference ordering).
+`"verification_failed"` is the separate post-sign discipline: the assembled
+artifact did not verify against the caller's view (for example a key that is
+not in the party descriptor's `verification_keys`). Malformed claims are
+rejected pre-sign as `"invalid_input"` through the verifier package's
+producer claims gate — they never burn a key operation. A signing failure is
+never a silent pass.
 
 ## Evidence
 
@@ -96,8 +101,9 @@ silent pass.
 Package SemVer decoupled from the protocol's `protocol_revision`. While the
 package is below 1.0, breaking public-API changes land in minor versions and
 are named in the commit message (0.2.0 is one: `signTermination`'s view
-requires `chain`, and `signAcceptance` now enforces the refusal guards over
-the `chain` it previously ignored); a package major is owed only when a
+requires `chain`, `signAcceptance` now enforces the refusal guards over the
+`chain` it previously ignored, and `signReceipt` requires its issuing view);
+a package major is owed only when a
 shipped public API is removed or changes behavior at or above 1.0.
 
 ## License

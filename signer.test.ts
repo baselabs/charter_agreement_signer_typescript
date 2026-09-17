@@ -21,6 +21,7 @@ import {
   verifyAcceptance,
   verifyChain,
   verifyDescriptor,
+  verifyReceipt,
   verifySignature,
   verifyTermination,
 } from "@charter-agreement-protocol/verifier";
@@ -126,33 +127,14 @@ test("the wrong-key guard rejects a signature from a different key", async () =>
   assert.equal((result as { error: string }).error, "signing_failed");
 });
 
-test("signReceipt round-trips without a chain context (revision-only posture)", async () => {
-  const { handle } = rawKeyHandle(Buffer.alloc(32, 4), "test-key-004");
-  const snapshot = await (handle as KeyHandle).keyIdentity(null);
-
-  const claims = {
-    protocol_revision: 2,
-    charter_id: "sha-256:" + "A".repeat(43),
-    revision_number: 1,
-    revision_digest: "sha-256:" + "B".repeat(43),
-    issuing_party_role: "issuer",
-    agent_party_role: "agent",
-    deployment_digest: "sha-256:" + "C".repeat(43),
-    grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "D".repeat(43) },
-    invocation_id: "inv-001",
-    decision: "accepted",
-    outcome: "effect_committed",
-    occurred_at: "2026-08-25T12:00:01Z",
-    recorded_at: "2026-08-25T12:00:02Z",
-    extensions: { critical: {}, optional: {} },
-  };
-  void snapshot;
-
-  const result = await signReceipt(claims, handle, null);
-  assert.ok(result.ok, JSON.stringify(result));
-  const header = JSON.parse(Buffer.from(result.result.receipt.split(".")[0], "base64url").toString("utf8"));
-  assert.equal(header.typ, "cap+receipt");
-  assert.equal(header.alg, "Ed25519");
+test("signReceipt round-trips over a bound chain context and rejects a missing one", async () => {
+  // The context is required: a JS caller passing nothing gets the closed
+  // invalid_input error, never a signed receipt over an unverified view.
+  const spy = spyHandle();
+  const missing = await signReceipt({} as Record<string, unknown>, spy.handle, null as never);
+  assert.ok(!missing.ok);
+  assert.equal((missing as { error: string }).error, "invalid_input");
+  assert.equal(spy.touches(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -172,6 +154,7 @@ type Party = { handle: unknown; descriptor: string; pdd: string };
 type World = {
   issuer: Party;
   acceptor: Party;
+  deploymentDigest: string;
   genesisText: string;
   genesisDigest: string;
   successorText: string;
@@ -229,9 +212,18 @@ before(async () => {
   const issuerPdd = issuerVerified.facts.descriptor_digest as string;
   const acceptorPdd = acceptorVerified.facts.descriptor_digest as string;
 
+  const deploymentDigest = "sha-256:" + "Q".repeat(43);
   const revisionText = (overrides: Record<string, unknown>) =>
     JSON.stringify({
-      abp_bindings: [],
+      abp_bindings: [
+        {
+          blueprint_id: "example.demo/echo",
+          content_digest: "sha-256:" + "P".repeat(43),
+          deployment_digest: deploymentDigest,
+          party_role: "acceptor",
+          release_number: 1,
+        },
+      ],
       attribution_declaration: { basis: "bound_deployments" },
       effective_from: "2026-08-25T12:00:00Z",
       extensions: { critical: {}, optional: {} },
@@ -344,6 +336,7 @@ before(async () => {
   const forkView = view([genesisText, leftFinal, rightFinal], [gIssuer, gAcceptor, rIssuer, rAcceptor]);
 
   Object.assign(world, {
+    deploymentDigest,
     genesisText, genesisDigest,
     successorText: successorFinal, successorDigest,
     leftText: leftFinal, leftDigest,
@@ -528,4 +521,86 @@ test("a 0.1.x-shaped termination view (no chain) fails closed, never throws", as
   assert.equal((result as { error: string }).error, "invalid_input");
   assert.equal((result as { code?: string }).code, "signing_input_invalid");
   assert.equal(spy.touches(), 0);
+});
+
+test("signReceipt: bound context happy path, post-verified", async () => {
+  const { handle } = rawKeyHandle(Buffer.alloc(32, 11), "issuer-key-001");
+  const claims = {
+    protocol_revision: 2,
+    charter_id: world.genesisDigest,
+    revision_number: 1,
+    revision_digest: world.genesisDigest,
+    issuing_party_role: "issuer",
+    agent_party_role: "acceptor",
+    deployment_digest: world.deploymentDigest,
+    grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "E".repeat(43) },
+    invocation_id: "inv-001",
+    decision: "accepted",
+    outcome: "effect_committed",
+    occurred_at: "2026-08-25T13:30:00Z",
+    recorded_at: "2026-08-25T13:30:01Z",
+    extensions: { critical: {}, optional: {} },
+  };
+  const result = await signReceipt(claims, handle, world.genesisView);
+  assert.ok(result.ok, JSON.stringify(result));
+  const header = JSON.parse(Buffer.from(result.result.receipt.split(".")[0], "base64url").toString("utf8"));
+  assert.equal(header.typ, "cap+receipt");
+  assert.equal(header.alg, "Ed25519");
+  const verified = verifyReceipt(result.result.receipt, world.genesisView);
+  assert.ok(verified.ok, JSON.stringify(verified));
+});
+
+test("malformed claims are rejected before the key is used (the producer claims gate)", async () => {
+  const spy = spyHandle();
+  // Acceptance n>1 without a predecessor digest: a codec schema red.
+  const acceptance = await signAcceptance(
+    { ...world.genesisIssuerClaims, revision_number: 2 } as Record<string, unknown>,
+    spy.handle,
+    { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView },
+  );
+  assert.ok(!acceptance.ok);
+  assert.equal((acceptance as { error: string }).error, "invalid_input");
+  assert.equal((acceptance as { code?: string }).code, "acceptance_invalid");
+  assert.equal(spy.touches(), 0);
+
+  // Receipt decision/outcome matrix red: rejected requires no_effect.
+  const receipt = await signReceipt(
+    {
+      protocol_revision: 2,
+      charter_id: world.genesisDigest,
+      revision_number: 1,
+      revision_digest: world.genesisDigest,
+      issuing_party_role: "issuer",
+      agent_party_role: "acceptor",
+      deployment_digest: world.deploymentDigest,
+      grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "E".repeat(43) },
+      invocation_id: "inv-001",
+      decision: "rejected",
+      outcome: "effect_committed",
+      occurred_at: "2026-08-25T13:30:00Z",
+      recorded_at: "2026-08-25T13:30:01Z",
+      extensions: { critical: {}, optional: {} },
+    },
+    spy.handle,
+    world.genesisView,
+  );
+  assert.ok(!receipt.ok);
+  assert.equal((receipt as { error: string }).error, "invalid_input");
+  assert.equal((receipt as { code?: string }).code, "cross_field_invalid");
+  assert.equal(spy.touches(), 0);
+});
+
+test("a post-sign verification failure is its own discipline: verification_failed", async () => {
+  // The snapshot key verifies its own signature (the wrong-key guard
+  // passes), but the key is not in the party descriptor's verification_keys:
+  // the assembled artifact cannot verify - the reference's canonical
+  // verification_failed example.
+  const { handle } = rawKeyHandle(Buffer.alloc(32, 99), "not-in-descriptor");
+  const result = await signAcceptance(world.genesisIssuerClaims, handle, {
+    revisionText: world.genesisText,
+    descriptorCompacts: [world.issuer.descriptor],
+    chain: world.genesisView,
+  });
+  assert.ok(!result.ok);
+  assert.equal((result as { error: string }).error, "verification_failed");
 });

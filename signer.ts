@@ -19,6 +19,7 @@
 import {
   acceptanceRefusal,
   algorithmRegistry,
+  checkSigningClaims,
   canonical,
   decodeArtifact,
   defaultEmissionName,
@@ -43,7 +44,8 @@ export type SignError =
   | { error: "invalid_handle" }
   | { error: "signing_failed" }
   | { error: "invalid_input"; code: string }
-  | { error: "refused"; code: string };
+  | { error: "refused"; code: string }
+  | { error: "verification_failed" };
 
 export type SignOk<T> = { ok: true; result: T };
 export type SignResult<T> = SignOk<T> | { ok: false } & SignError;
@@ -55,7 +57,9 @@ export type ChainView = {
   terminations: string[];
 };
 
-const TYPES: Record<string, string> = {
+const KINDS = ["descriptor", "acceptance", "termination", "receipt"] as const;
+export type ArtifactKind = (typeof KINDS)[number];
+const TYPES: Record<ArtifactKind, string> = {
   descriptor: "cap+party",
   acceptance: "cap+acceptance",
   termination: "cap+termination",
@@ -163,6 +167,12 @@ async function signCommon(
   const framed = frameSigningInput(kind, claims, snapshot.kid, algorithm);
   if ("error" in framed) return framed;
 
+  // The producer build gate's claims half (the reference decode_for_signing):
+  // schema checks over the claims alone, BEFORE any key is used - malformed
+  // claims are a typed producer rejection, never a burned key operation.
+  const claimsGate = checkSigningClaims(kind, claims);
+  if (!claimsGate.ok) return { error: "invalid_input", code: claimsGate.code };
+
   // The honest-signer refusal boundary (R1-R3 from the Elixir reference):
   // the set-aware guards run here — after framing, BEFORE the key signs —
   // against the caller's own verified view, exactly the reference producer
@@ -240,23 +250,27 @@ export async function signDescriptor(
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
   const verified = verifyDescriptor(compact);
-  if (!verified.ok) return { ok: false, error: "invalid_input", code: verified.code };
+  if (!verified.ok) return { ok: false, error: "verification_failed" };
   return { ok: true, result: { descriptor: compact } };
 }
 
 export async function signReceipt(
   claims: Record<string, unknown>,
   keyHandle: unknown,
-  chain: ChainView | null,
+  chain: ChainView,
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ receipt: string }>> {
+  // The issuing view is REQUIRED (the reference takes ChainFacts or a
+  // CharterRevision, never none) and policed at this boundary like every
+  // other caller input.
+  const resolvedChain = chainViewOrInvalid(chain);
+  if ("error" in resolvedChain) return { ok: false, ...resolvedChain };
+
   const signed = await signCommon("receipt", claims, keyHandle, opts);
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
-  if (chain) {
-    const verified = verifyReceipt(compact, chain);
-    if (!verified.ok) return { ok: false, error: "invalid_input", code: verified.code };
-  }
+  const verified = verifyReceipt(compact, resolvedChain);
+  if (!verified.ok) return { ok: false, error: "verification_failed" };
   return { ok: true, result: { receipt: compact } };
 }
 
@@ -273,7 +287,7 @@ export async function signAcceptance(
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
   const verified = verifyAcceptance(compact, view.revisionText, view.descriptorCompacts);
-  if (!verified.ok) return { ok: false, error: "invalid_input", code: verified.code };
+  if (!verified.ok) return { ok: false, error: "verification_failed" };
   return { ok: true, result: { acceptance: compact } };
 }
 
@@ -290,6 +304,6 @@ export async function signTermination(
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
   const verified = verifyTermination(compact, view.revisionText, view.descriptorCompacts);
-  if (!verified.ok) return { ok: false, error: "invalid_input", code: verified.code };
+  if (!verified.ok) return { ok: false, error: "verification_failed" };
   return { ok: true, result: { termination: compact } };
 }
