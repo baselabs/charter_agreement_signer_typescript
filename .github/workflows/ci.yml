@@ -21,8 +21,12 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install (frozen lockfile)
-        run: npm ci
+      # No lockfile yet: the verifier ^0.3.0 dependency (the refusal surface)
+      # resolves from the registry once its staged release is approved. The
+      # lockfile + frozen install land with the first green run after that
+      # approval.
+      - name: Install
+        run: npm install
 
       - name: Typecheck (strict)
         run: npm run typecheck

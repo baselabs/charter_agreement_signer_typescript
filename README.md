@@ -9,7 +9,9 @@ Holder-side companion signer for the
 custody.** You keep the key (HSM, OS keychain, key server) behind a handle
 object with two callbacks; the signer resolves ONE atomic `keyIdentity`
 snapshot, builds the exact RFC 7515 signing input, runs the honest-signer
-refusal guards before any key is touched, checks the returned signature
+refusal guards (R1–R3: claims-truth, no-equivocation, ancestry/governing
+coverage — through the verifier package's refusal surface) **before the key
+signs**, checks the returned signature
 against the snapshot's public key (the wrong-key guard), assembles the
 compact, and post-sign-verifies the assembled artifact through the
 `@charter-agreement-protocol/verifier` package — exactly one verification
@@ -66,11 +68,18 @@ empty context — your handle signs the exact message bytes as with Ed25519).
 |---|---|
 | `signDescriptor(claims, handle, opts?)` | Signs one Party Descriptor; post-verified via `verifyDescriptor` |
 | `signReceipt(claims, handle, chain \| null, opts?)` | Signs one Receipt; post-verified via `verifyReceipt` when a chain view is supplied |
-| `signAcceptance(claims, handle, view, opts?)` | Signs one Acceptance against the caller's verified view |
-| `signTermination(claims, handle, view, opts?)` | Signs one Termination against the caller's verified view |
+| `signAcceptance(claims, handle, view, opts?)` | Signs one Acceptance against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
+| `signTermination(claims, handle, view, opts?)` | Signs one Termination against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
+
+The acceptance/termination `view` is `{ revisionText, descriptorCompacts,
+chain }`: the revision the claims name, the signing party's descriptor
+chain, and the caller's full `ChainView` (`{ revisions, acceptances,
+descriptors, terminations }`) the refusal guards verify and bind against.
 
 Errors are closed: `{ ok: false, error: "invalid_handle" \| "signing_failed"
-\| "invalid_input" \| "refused", code? }`. A signing failure is never a
+\| "invalid_input" \| "refused", code? }`. `"refused"` is the honest-signer
+refusal: the claims contradict the caller's own verified view, and the key
+is never touched. A signing failure is never a
 silent pass.
 
 ## Evidence

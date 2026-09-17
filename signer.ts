@@ -9,24 +9,28 @@
 //
 // The signer builds the exact RFC 7515 signing input through the verifier
 // package's producers surface, runs the honest-signer refusal guards
-// BEFORE any key is touched, checks the returned signature against the
+// (R1–R3, through the verifier package's refusal surface) before the key
+// signs, checks the returned signature against the
 // snapshot's public key (the wrong-key guard), assembles the compact, and
 // post-sign-verifies the assembled artifact through the verifier package.
 // It never verifies third-party artifacts, never transports, never
 // persists, and never sees a private key.
 
 import {
+  acceptanceRefusal,
   algorithmRegistry,
   canonical,
   decodeArtifact,
   defaultEmissionName,
   emissions,
   encodeBase64url,
+  terminationRefusal,
   verifyAcceptance,
   verifyDescriptor,
   verifyReceipt,
   verifySignature,
   verifyTermination,
+  type RefusalResult,
 } from "@charter-agreement-protocol/verifier";
 
 export type KeySnapshot = { kid: string; publicKey: string };
@@ -148,6 +152,7 @@ async function signCommon(
   claims: Record<string, unknown>,
   keyHandle: KeyHandle | unknown,
   opts: { algorithm?: string },
+  refusal?: () => SignError | null,
 ): Promise<{ message: Buffer; signature: Buffer } | SignError> {
   const snapshot = await resolveKeyIdentity(keyHandle);
   if ("error" in snapshot) return snapshot;
@@ -157,6 +162,15 @@ async function signCommon(
 
   const framed = frameSigningInput(kind, claims, snapshot.kid, algorithm);
   if ("error" in framed) return framed;
+
+  // The honest-signer refusal boundary (R1-R3 from the Elixir reference):
+  // the set-aware guards run here — after framing, BEFORE the key signs —
+  // against the caller's own verified view, exactly the reference producer
+  // ordering. A refusal never touches the key.
+  if (refusal) {
+    const refusalError = refusal();
+    if (refusalError) return refusalError;
+  }
 
   // The holder signs the exact message; a fault or a wrong-length result is
   // a signing failure, never a silent pass.
@@ -194,10 +208,13 @@ function assemble(message: Buffer, signature: Buffer): string {
   return `${message.toString("utf8")}.${encodeBase64url(signature)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Honest-signer refusal guards (R1–R3 from the Elixir reference): they run
-// against the caller's own verified view BEFORE any key is touched.
-// ---------------------------------------------------------------------------
+// The refusal surface's closed mapping: signing_refused is the honest-signer
+// refusal; the view/claims-shape codes stay caller-input errors.
+function mapRefusal(result: RefusalResult): SignError | null {
+  if (result.ok) return null;
+  if (result.code === "signing_refused") return { error: "refused", code: result.code };
+  return { error: "invalid_input", code: result.code };
+}
 
 // ---------------------------------------------------------------------------
 // Public signing surface
@@ -238,7 +255,9 @@ export async function signAcceptance(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ acceptance: string }>> {
-  const signed = await signCommon("acceptance", claims, keyHandle, opts);
+  const signed = await signCommon("acceptance", claims, keyHandle, opts, () =>
+    mapRefusal(acceptanceRefusal(claims, view.chain)),
+  );
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
   const verified = verifyAcceptance(compact, view.revisionText, view.descriptorCompacts);
@@ -249,10 +268,12 @@ export async function signAcceptance(
 export async function signTermination(
   claims: Record<string, unknown>,
   keyHandle: unknown,
-  view: { revisionText: string; descriptorCompacts: string[] },
+  view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ termination: string }>> {
-  const signed = await signCommon("termination", claims, keyHandle, opts);
+  const signed = await signCommon("termination", claims, keyHandle, opts, () =>
+    mapRefusal(terminationRefusal(claims, view.chain)),
+  );
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
   const verified = verifyTermination(compact, view.revisionText, view.descriptorCompacts);
