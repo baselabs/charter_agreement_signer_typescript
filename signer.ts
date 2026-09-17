@@ -216,6 +216,17 @@ function mapRefusal(result: RefusalResult): SignError | null {
   return { error: "invalid_input", code: result.code };
 }
 
+// The view's chain is THIS package's public contract (the refusal surface
+// validates its depth); the shallow shape is policed here so the closed
+// error vocabulary holds regardless of which verifier revision resolves.
+// A verifier crash past this gate stays loud - never a misleading error.
+function chainViewOrInvalid(chain: unknown): ChainView | SignError {
+  if (!chain || typeof chain !== "object" || Array.isArray(chain)) {
+    return { error: "invalid_input", code: "signing_input_invalid" };
+  }
+  return chain as ChainView;
+}
+
 // ---------------------------------------------------------------------------
 // Public signing surface
 // ---------------------------------------------------------------------------
@@ -255,8 +266,9 @@ export async function signAcceptance(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ acceptance: string }>> {
+  const chain = chainViewOrInvalid(view.chain);
   const signed = await signCommon("acceptance", claims, keyHandle, opts, () =>
-    mapRefusal(acceptanceRefusal(claims, view.chain)),
+    "error" in chain ? chain : mapRefusal(acceptanceRefusal(claims, chain)),
   );
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
@@ -271,8 +283,9 @@ export async function signTermination(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ termination: string }>> {
+  const chain = chainViewOrInvalid(view.chain);
   const signed = await signCommon("termination", claims, keyHandle, opts, () =>
-    mapRefusal(terminationRefusal(claims, view.chain)),
+    "error" in chain ? chain : mapRefusal(terminationRefusal(claims, chain)),
   );
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);

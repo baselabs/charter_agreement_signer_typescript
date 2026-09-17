@@ -96,8 +96,9 @@ silent pass.
 Package SemVer decoupled from the protocol's `protocol_revision`. While the
 package is below 1.0, breaking public-API changes land in minor versions and
 are named in the commit message (0.2.0 is one: `signTermination`'s view
-requires `chain`); a package major is owed only when a shipped public API is
-removed or changes behavior at or above 1.0.
+requires `chain`, and `signAcceptance` now enforces the refusal guards over
+the `chain` it previously ignored); a package major is owed only when a
+shipped public API is removed or changes behavior at or above 1.0.
 
 ## License
 
