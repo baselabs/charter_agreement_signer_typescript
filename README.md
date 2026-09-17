@@ -77,7 +77,9 @@ chain, and the caller's full `ChainView` (`{ revisions, acceptances,
 descriptors, terminations }`) the refusal guards verify and bind against.
 
 Errors are closed: `{ ok: false, error: "invalid_handle" \| "signing_failed"
-\| "invalid_input" \| "refused" \| "verification_failed", code? }`.
+\| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides
+only on `invalid_input` and `refused`; `verification_failed` is bare
+(reference parity).
 `"refused"` is the honest-signer refusal: the claims contradict the caller's
 own verified view, and the handle's `sign` callback is never reached (the
 atomic `keyIdentity` snapshot resolves first — the reference ordering).
@@ -103,8 +105,8 @@ package is below 1.0, breaking public-API changes land in minor versions and
 are named in the commit message (0.2.0 is one: `signTermination`'s view
 requires `chain`, `signAcceptance` now enforces the refusal guards over the
 `chain` it previously ignored, and `signReceipt` requires its issuing view);
-a package major is owed only when a
-shipped public API is removed or changes behavior at or above 1.0.
+at or above 1.0 a package major is owed when a shipped public API is removed
+or changes behavior.
 
 ## License
 

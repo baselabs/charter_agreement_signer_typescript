@@ -127,13 +127,46 @@ test("the wrong-key guard rejects a signature from a different key", async () =>
   assert.equal((result as { error: string }).error, "signing_failed");
 });
 
-test("signReceipt round-trips over a bound chain context and rejects a missing one", async () => {
-  // The context is required: a JS caller passing nothing gets the closed
-  // invalid_input error, never a signed receipt over an unverified view.
+test("signReceipt rejects a missing or chain-invalid issuing view before the key is used", async () => {
+  // Well-formed claims: the ONLY rejection path is the view gate, so this
+  // goes red if the gate is removed (empty claims would be rejected by
+  // framing regardless, proving nothing about the gate).
   const spy = spyHandle();
-  const missing = await signReceipt({} as Record<string, unknown>, spy.handle, null as never);
+  const claims = {
+    protocol_revision: 2,
+    charter_id: world.genesisDigest,
+    revision_number: 1,
+    revision_digest: world.genesisDigest,
+    issuing_party_role: "issuer",
+    agent_party_role: "acceptor",
+    deployment_digest: world.deploymentDigest,
+    grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "E".repeat(43) },
+    invocation_id: "inv-001",
+    decision: "accepted",
+    outcome: "effect_committed",
+    occurred_at: "2026-08-25T13:30:00Z",
+    recorded_at: "2026-08-25T13:30:01Z",
+    extensions: { critical: {}, optional: {} },
+  };
+  const missing = await signReceipt(claims, spy.handle, null as never);
   assert.ok(!missing.ok);
   assert.equal((missing as { error: string }).error, "invalid_input");
+  assert.equal((missing as { code?: string }).code, "signing_input_invalid");
+  assert.equal(spy.touches(), 0);
+
+  const broken: ChainView = { ...world.genesisView, acceptances: ["not-a-compact-jws"] };
+  const invalid = await signReceipt(claims, spy.handle, broken);
+  assert.ok(!invalid.ok);
+  assert.equal((invalid as { error: string }).error, "invalid_input");
+  assert.equal((invalid as { code?: string }).code, "chain_invalid");
+  assert.equal(spy.touches(), 0);
+});
+
+test("a missing view object is the closed invalid_input, never a throw", async () => {
+  const spy = spyHandle();
+  const acceptance = await signAcceptance(world.genesisIssuerClaims, spy.handle, undefined as never);
+  assert.ok(!acceptance.ok);
+  assert.equal((acceptance as { error: string }).error, "invalid_input");
   assert.equal(spy.touches(), 0);
 });
 

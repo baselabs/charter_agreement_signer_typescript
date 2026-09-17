@@ -27,6 +27,7 @@ import {
   encodeBase64url,
   terminationRefusal,
   verifyAcceptance,
+  verifyChain,
   verifyDescriptor,
   verifyReceipt,
   verifySignature,
@@ -58,7 +59,7 @@ export type ChainView = {
 };
 
 const KINDS = ["descriptor", "acceptance", "termination", "receipt"] as const;
-export type ArtifactKind = (typeof KINDS)[number];
+type ArtifactKind = (typeof KINDS)[number];
 const TYPES: Record<ArtifactKind, string> = {
   descriptor: "cap+party",
   acceptance: "cap+acceptance",
@@ -237,6 +238,13 @@ function chainViewOrInvalid(chain: unknown): ChainView | SignError {
   return chain as ChainView;
 }
 
+// A missing view object is caller input like a missing chain: the closed
+// error, never a dereference throw.
+function viewChainOrInvalid(view: { chain: ChainView }): ChainView | SignError {
+  if (!view || typeof view !== "object") return { error: "invalid_input", code: "signing_input_invalid" };
+  return chainViewOrInvalid(view.chain);
+}
+
 // ---------------------------------------------------------------------------
 // Public signing surface
 // ---------------------------------------------------------------------------
@@ -261,15 +269,19 @@ export async function signReceipt(
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ receipt: string }>> {
   // The issuing view is REQUIRED (the reference takes ChainFacts or a
-  // CharterRevision, never none) and policed at this boundary like every
-  // other caller input.
-  const resolvedChain = chainViewOrInvalid(chain);
-  if ("error" in resolvedChain) return { ok: false, ...resolvedChain };
-
-  const signed = await signCommon("receipt", claims, keyHandle, opts);
+  // CharterRevision, never none). Its discipline runs pre-sign through the
+  // same closure position as the refusal pass - the reference's context is
+  // a verified ChainFacts by construction, so a TS view that fails the
+  // chain discipline is caller input, never a burned key operation.
+  const signed = await signCommon("receipt", claims, keyHandle, opts, () => {
+    const resolved = chainViewOrInvalid(chain);
+    if ("error" in resolved) return resolved;
+    if (!verifyChain(resolved).ok) return { error: "invalid_input", code: "chain_invalid" };
+    return null;
+  });
   if ("error" in signed) return { ok: false, ...signed };
   const compact = assemble(signed.message, signed.signature);
-  const verified = verifyReceipt(compact, resolvedChain);
+  const verified = verifyReceipt(compact, chain);
   if (!verified.ok) return { ok: false, error: "verification_failed" };
   return { ok: true, result: { receipt: compact } };
 }
@@ -280,7 +292,7 @@ export async function signAcceptance(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ acceptance: string }>> {
-  const chain = chainViewOrInvalid(view.chain);
+  const chain = viewChainOrInvalid(view);
   const signed = await signCommon("acceptance", claims, keyHandle, opts, () =>
     "error" in chain ? chain : mapRefusal(acceptanceRefusal(claims, chain)),
   );
@@ -297,7 +309,7 @@ export async function signTermination(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string } = {},
 ): Promise<SignResult<{ termination: string }>> {
-  const chain = chainViewOrInvalid(view.chain);
+  const chain = viewChainOrInvalid(view);
   const signed = await signCommon("termination", claims, keyHandle, opts, () =>
     "error" in chain ? chain : mapRefusal(terminationRefusal(claims, chain)),
   );
