@@ -27,13 +27,19 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types --no-warnings signer.test.ts",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "typecheck:web": "tsc -p tsconfig.web.json",
+    "build:site": "node web/build.mjs && esbuild web/main.ts --bundle --minify --format=iife --target=es2022 --outfile=site-dist/app.js --alias:node:crypto=./web/shim/node-crypto.ts --alias:node:fs=./web/shim/node-fs.ts --alias:node:path=./web/shim/node-path.ts --inject:./web/shim/buffer-global.ts"
   },
   "dependencies": {
     "@charter-agreement-protocol/verifier": "^0.4.0"
   },
   "devDependencies": {
+    "@noble/ed25519": "^3.2.0",
+    "@noble/hashes": "^2.4.0",
     "@types/node": "^26.5.1",
+    "buffer": "^6.0.3",
+    "esbuild": "^0.28.2",
     "typescript": "~5.9.0"
   },
   "repository": {
