@@ -249,7 +249,8 @@ details.raw pre { background: var(--hero); color: #a5f3fc; border-radius: 8px; p
 
 /* the artifact accordion */
 .acc { border: 1.5px solid var(--line-2); border-radius: 12px; overflow: hidden; background: var(--bg); }
-.acc + .acc { margin-top: 10px; }
+.acc { margin-top: 10px; }
+.acc:first-child { margin-top: 0; }  /* rhythm holds across containers, not just siblings */
 .acc-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--bg-soft); border: 0; cursor: pointer; font: inherit; font-weight: 650; color: var(--ink); text-align: left; }
 .acc-head:hover { background: #eef2f7; }
 .acc-head > .ic:first-child { color: var(--muted); }
