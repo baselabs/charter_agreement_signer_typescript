@@ -227,3 +227,8 @@ pre.code.slim { padding: 12px 16px; font-size: .78rem; }
 .step-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; }
 .step-slots .card-slot { min-height: 104px; }
 .facts-floor { border-top: 1px dashed var(--line-2); margin-top: 8px; padding-top: 8px; font-size: .78rem; color: var(--muted); }
+
+/* workshop: three lanes, equal columns hardened against no-wrap <code>
+   min-content width stealing (the family bug fixed on the BAP sites). */
+.lanes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.props code { white-space: normal; overflow-wrap: anywhere; }
