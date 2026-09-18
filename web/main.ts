@@ -4,6 +4,7 @@
 // with node:crypto/fs/path shims. Two parties' keys are generated in your
 // browser; the private keys never enter either library.
 import { keygen, sign as nobleSign } from "@noble/ed25519";
+import { sha256 } from "@noble/hashes/sha2.js";
 import {
   signAcceptance,
   signDescriptor,
@@ -47,7 +48,11 @@ let issuer: Party, acceptor: Party;
 let genesisText = "", genesisDigest = "";
 let acceptanceIssuer = "", acceptanceAcceptor = "";
 let receipt = "";
-const dg = (c: string) => "sha-256:" + c.repeat(43);
+// Deterministic fixture digests: hash the seed so every demo digest READS like
+// a digest (43 base64url chars of real SHA-256 output) instead of a repeated
+// letter — the shape the protocol's digest fields validate either way.
+const dg = (seed: string): string =>
+  "sha-256:" + Buffer.from(sha256(new TextEncoder().encode("demo:" + seed))).toString("base64url");
 
 function revisionText(overrides: Record<string, unknown>): string {
   // Mirrors the package's own test fixture exactly: the genesis revision
@@ -160,6 +165,33 @@ function replacer(_k: string, v: unknown): unknown {
   return v;
 }
 
+
+// ---------- fact panels (designed key/value view; raw JSON behind a toggle) ----------
+const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function factRows(obj: unknown): string {
+  if (obj === null || typeof obj !== "object" || obj instanceof Uint8Array) {
+    const s = obj instanceof Uint8Array ? Array.from(obj.slice(0, 8)).join(",") + "…" : String(obj);
+    return `<span class="fv">${esc(s)}</span>`;
+  }
+  const entries: [string, unknown][] = Array.isArray(obj)
+    ? obj.map((v, i) => [`#${i + 1}`, v])
+    : Object.entries(obj as Record<string, unknown>);
+  return entries.map(([k, v]) => {
+    if (v !== null && typeof v === "object" && !(v instanceof Uint8Array)) {
+      return `<div class="factrow nest"><span class="fk">${esc(k)}</span><div class="subfacts">${factRows(v)}</div></div>`;
+    }
+    const s = String(v);
+    const shown = s.length > 64 ? s.slice(0, 64) + "…" : s;
+    return `<div class="factrow"><span class="fk">${esc(k)}</span><span class="fv" title="${esc(s)}">${esc(shown)}</span></div>`;
+  }).join("");
+}
+
+function factPanel(label: string, facts: unknown, raw: unknown): string {
+  return `<div class="factlabel">${esc(label)}</div><div class="facts">${factRows(facts)}</div>` +
+    `<details class="raw"><summary>raw JSON</summary><pre>${esc(JSON.stringify(raw, (_k, v) => v instanceof Map ? Object.fromEntries(v) : v instanceof Uint8Array ? Array.from(v) : v, 2))}</pre></details>`;
+}
+
 function setVerdict(state: "idle" | "ok" | "fail", html: string): void {
   const v = $("verdict");
   v.dataset.state = state;
@@ -250,12 +282,12 @@ function verifyWorld(w: { revisions: string[]; acceptances: string[]; descriptor
   const at = verifyChain(w);
   if (at.ok) {
     setVerdict("ok", "CHAIN VERIFIED — structural facts returned");
-    $("facts-body").textContent = factsSummary(at.facts as Record<string, unknown>) + "\n\n" + JSON.stringify(at.facts, replacer, 2);
+    $("facts-body").innerHTML = factPanel("chain facts", at.facts, at.facts);
     $("tamper-hint").className = "hint";
     $("tamper-hint").textContent = "Now break it — every button below produces a real refusal.";
   } else {
     setVerdict("fail", `VERIFICATION FAILED — <b>${(at as { code?: string }).code ?? "invalid"}</b>`);
-    $("facts-body").textContent = JSON.stringify(at, replacer, 2);
+    $("facts-body").innerHTML = factPanel("result", at, at);
     $("tamper-hint").className = "hint fail";
     const why: Record<string, string> = {
       revision: "the revision bytes changed after acceptance — the digest bindings no longer match",
