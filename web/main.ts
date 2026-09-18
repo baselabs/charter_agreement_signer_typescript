@@ -221,6 +221,25 @@ function accordion(title: string, chip: string | undefined, facts: unknown, open
   </div>`;
 }
 
+
+// Raw-JSON code box for the FACTS area (owner-directed: no formatted view) —
+// defensively hex any string that still carries control/lossy characters.
+function sanitize(v: unknown): unknown {
+  if (typeof v === "string" && /[\u0000-\u0008\u000e-\u001f\u007f-\u00ff\ufffd]/.test(v)) {
+    return "0x" + Array.from(v, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+  }
+  if (Array.isArray(v)) return v.map(sanitize);
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) o[k] = sanitize(val);
+    return o;
+  }
+  return v;
+}
+function rawJsonBox(facts: unknown): string {
+  return `<pre class="codebox">${esc(JSON.stringify(sanitize(facts), null, 2))}</pre>`;
+}
+
 // One delegated listener drives every accordion on the page, including ones
 // injected later (artifacts after mint).
 document.addEventListener("click", (e) => {
@@ -322,12 +341,12 @@ function verifyWorld(w: { revisions: string[]; acceptances: string[]; descriptor
   const at = verifyChain(w);
   if (at.ok) {
     setVerdict("ok", "CHAIN VERIFIED — structural facts returned");
-    $("facts-body").innerHTML = accordion("Chain facts", undefined, at.facts, true);
+    $("facts-body").innerHTML = rawJsonBox(at.facts);
     $("tamper-hint").className = "hint";
     $("tamper-hint").textContent = "Now break it — every button below produces a real refusal.";
   } else {
     setVerdict("fail", `VERIFICATION FAILED — <b>${(at as { code?: string }).code ?? "invalid"}</b>`);
-    $("facts-body").innerHTML = accordion("Result", undefined, at, true);
+    $("facts-body").innerHTML = rawJsonBox(at);
     $("tamper-hint").className = "hint fail";
     const why: Record<string, string> = {
       revision: "the revision bytes changed after acceptance — the digest bindings no longer match",
