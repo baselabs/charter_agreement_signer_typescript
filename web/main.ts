@@ -169,9 +169,25 @@ function replacer(_k: string, v: unknown): unknown {
 // ---------- fact panels (designed key/value view; raw JSON behind a toggle) ----------
 const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// Byte-ish values (Uint8Array, or strings carrying raw binary from the
+// package's decode surface) render as compact hex — never utf-8 mojibake.
+const toHex = (bytes: number[]): string => bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+const isBinaryString = (s: string): boolean => /[\u0000-\u0008\u000e-\u001f\u007f-\u00ff]/.test(s);
+const asBytes = (v: Uint8Array | string): number[] =>
+  typeof v === "string" ? Array.from(v, (c) => c.charCodeAt(0) & 0xff) : Array.from(v);
+
+function renderValue(v: unknown): { shown: string; title: string } | null {
+  if (v instanceof Uint8Array || (typeof v === "string" && isBinaryString(v))) {
+    const bytes = asBytes(v as Uint8Array | string);
+    const hex = toHex(bytes);
+    return { shown: `hex:${hex.slice(0, 24)}… (${bytes.length}B)`, title: hex };
+  }
+  return null;
+}
+
 function factRows(obj: unknown): string {
-  if (obj === null || typeof obj !== "object" || obj instanceof Uint8Array) {
-    const s = obj instanceof Uint8Array ? Array.from(obj.slice(0, 8)).join(",") + "…" : String(obj);
+  if (obj === null || typeof obj !== "object") {
+    const s = String(obj);
     return `<span class="fv">${esc(s)}</span>`;
   }
   const entries: [string, unknown][] = Array.isArray(obj)
@@ -181,15 +197,18 @@ function factRows(obj: unknown): string {
     if (v !== null && typeof v === "object" && !(v instanceof Uint8Array)) {
       return `<div class="factrow nest"><span class="fk">${esc(k)}</span><div class="subfacts">${factRows(v)}</div></div>`;
     }
+    const bin = renderValue(v);
+    if (bin) {
+      return `<div class="factrow"><span class="fk">${esc(k)}</span><span class="fv" title="${esc(bin.title)}">${esc(bin.shown)}</span></div>`;
+    }
     const s = String(v);
     const shown = s.length > 64 ? s.slice(0, 64) + "…" : s;
     return `<div class="factrow"><span class="fk">${esc(k)}</span><span class="fv" title="${esc(s)}">${esc(shown)}</span></div>`;
   }).join("");
 }
 
-function factPanel(label: string, facts: unknown, raw: unknown): string {
-  return `<div class="factlabel">${esc(label)}</div><div class="facts">${factRows(facts)}</div>` +
-    `<details class="raw"><summary>raw JSON</summary><pre>${esc(JSON.stringify(raw, (_k, v) => v instanceof Map ? Object.fromEntries(v) : v instanceof Uint8Array ? Array.from(v) : v, 2))}</pre></details>`;
+function factPanel(label: string, facts: unknown): string {
+  return `<div class="factlabel">${esc(label)}</div><div class="facts">${factRows(facts)}</div>`;
 }
 
 function setVerdict(state: "idle" | "ok" | "fail", html: string): void {
@@ -282,12 +301,12 @@ function verifyWorld(w: { revisions: string[]; acceptances: string[]; descriptor
   const at = verifyChain(w);
   if (at.ok) {
     setVerdict("ok", "CHAIN VERIFIED — structural facts returned");
-    $("facts-body").innerHTML = factPanel("chain facts", at.facts, at.facts);
+    $("facts-body").innerHTML = factPanel("chain facts", at.facts);
     $("tamper-hint").className = "hint";
     $("tamper-hint").textContent = "Now break it — every button below produces a real refusal.";
   } else {
     setVerdict("fail", `VERIFICATION FAILED — <b>${(at as { code?: string }).code ?? "invalid"}</b>`);
-    $("facts-body").innerHTML = factPanel("result", at, at);
+    $("facts-body").innerHTML = factPanel("result", at);
     $("tamper-hint").className = "hint fail";
     const why: Record<string, string> = {
       revision: "the revision bytes changed after acceptance — the digest bindings no longer match",
