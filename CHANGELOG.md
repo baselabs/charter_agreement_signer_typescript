@@ -3,24 +3,17 @@
 All notable public changes to `@charter-agreement-protocol/signer` are
 documented here.
 
-## [Unreleased]
+## [0.2.1] — 2026-09-24
 
-### Documentation
-
-- The verify side moved: `@charter-agreement-protocol/verifier` 0.5.0 is
-  live — it mirrors the protocol package's 0.4.0 release-identity act
-  (`capabilities()`, the signature registry identity
-  `algorithmRegistryDigest()`, the descriptor timestamp floor, and the
-  104-case certified corpus). Nothing breaks this package: its dependency
-  stays `^0.4.0` deliberately (caret on 0.x pins the minor),
-  the producer surface it delegates to is unchanged, and the wire is
-  unchanged (`protocol_revision` stays 3).
-- The producer-side capability alignment is recorded as a contract with
-  the protocol repository (a mirrored `capabilities()` probe with
-  refuse-before-mint, declared minting metadata, a profile-bound signing
-  mode). When it lands here, the dependency moves to `^0.5.0`
-  in the same release — a deliberate one-line bump, never a silent
-  re-resolve.
+Dependency-line release: this package now tracks the published verify
+line - `@charter-agreement-protocol/verifier` `^0.5.0` (resolved 0.5.0).
+No API change: verifier 0.5.0 added consumer-side surface only (the
+capability probe, the signature registry identity, the descriptor
+timestamp floor, the 104-case corpus); the producer surface this package
+delegates to is unchanged. Typecheck strict, 18/18 tests against the
+resolved 0.5.0. The producer-side capability alignment (mirrored
+`capabilities()` with refuse-before-mint, declared minting metadata,
+profile-bound signing) is the next feature release on this line.
 
 ## [0.2.0] — 2026-09-17
 
