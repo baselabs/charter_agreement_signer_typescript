@@ -126,6 +126,19 @@ against the published version immediately after.
   [@charter-agreement-protocol/verifier](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
   package — the certified dual-implementation-verified verifier.
 
+## The 0.5.x verify side
+
+`@charter-agreement-protocol/verifier` 0.5.0 mirrors the protocol package's
+0.4.0 release-identity act (the capability probe, the signature registry
+identity, the descriptor timestamp floor, the 104-case certified corpus).
+This package is unaffected: its dependency stays at the 0.4.x line
+deliberately, the producer surface it delegates to is unchanged, and the
+wire is unchanged. The producer-side capability alignment (mirrored
+`capabilities()` with refuse-before-mint, declared minting metadata, a
+profile-bound signing mode) is recorded as a contract with the protocol
+repository and lands here with the dependency bump to the 0.5.x line —
+see CHANGELOG's Unreleased note.
+
 ## SemVer
 
 Package SemVer decoupled from the protocol's `protocol_revision`. While the
