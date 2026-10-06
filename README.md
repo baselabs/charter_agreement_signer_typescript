@@ -23,13 +23,18 @@ verification of the assembled artifact through the
 npm install @charter-agreement-protocol/signer
 ```
 
-Requires Node >= 24.8 (ML-DSA support in the Node builtins).
+Release **0.2.2** requires Node >= 24.8.0 (ML-DSA support in the Node builtins)
+and depends on `@charter-agreement-protocol/verifier` `^0.5.0`.
 
 ## Quickstart
 
+This runnable Ed25519 example keeps the private key in a Node `KeyObject`.
+For an HSM, OS keychain, or remote key server, replace the handle's callbacks
+with your custodian's key identity and signing operations.
+
 ```js
 import { signDescriptor } from "@charter-agreement-protocol/signer";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, sign as nodeSign } from "node:crypto";
 
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 const publicKeyBase64url = publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("base64url");
@@ -41,7 +46,7 @@ const handle = {
   },
   // The holder's job: sign the exact message bytes with the held key.
   sign(message) {
-    return myHsm.sign(message); // Uint8Array signature
+    return nodeSign(null, message, privateKey); // Buffer is a Uint8Array
   },
 };
 
@@ -54,12 +59,13 @@ const result = await signDescriptor(
     ],
     attestation_hints: [],
     extensions: { critical: {}, optional: {} },
-    effective_from: "2026-08-25T10:00:00Z",
+    effective_from: new Date().toISOString(),
   },
   handle,
 );
 
-// result.ok === true: { descriptor } is a CAP-verified compact JWS.
+if (!result.ok) throw new Error(JSON.stringify(result));
+console.log(result.result.descriptor); // Post-verified compact JWS
 ```
 
 For ML-DSA-65 artifacts pass `{ algorithm: "ML-DSA-65" }` as the options
@@ -109,16 +115,18 @@ TypeScript-signed artifacts from raw bytes).
   — verification and the pure producer surface (signing inputs, claims
   gate, refusal guards, assembly) that this package signs through.
 
-The pair releases together: this package depends on the verifier (`^0.4.0`),
-so a verifier release stages first and the signer locks and releases
-against the published version immediately after.
+This signer depends on the verifier (`^0.5.0`, locked to 0.5.0). When changing
+that dependency, publish the verifier version first, then lock and release
+the signer against the published version. The packages have independent
+SemVer versions; signer documentation and build-tool updates can release
+without a verifier version change.
 
 ## Evidence
 
 - The Elixir reference repository's gate verifies TypeScript-signed
   artifacts from raw bytes (cross-implementation agreement, enforced in CI).
 - Framing, the producer claims gate, refusal guards, and assembly are the
-  verifier package's producer surface (0.4.0) — the same single
+  verifier package's producer surface (0.5.0) — the same single
   implementation the independent verifier certifies. What remains here is
   custody plus input policing: the issuing-view discipline composes the
   verifier's own `verifyChain`, never a local reimplementation.
@@ -144,6 +152,41 @@ requires `chain`, `signAcceptance` now enforces the refusal guards over the
 `chain` it previously ignored, and `signReceipt` requires its issuing view);
 at or above 1.0 a package major is owed when a shipped public API is removed
 or changes behavior.
+
+## Development
+
+Use Node 24 (at least 24.8.0) and npm. The lockfile selects TypeScript 7.0.2
+and `@types/node` 26.6.4. CI runs on Linux with Node 24 and a frozen install;
+the same npm commands are used for local development on macOS and Linux.
+
+```console
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run typecheck:web
+npm run build:site
+npm pack --dry-run
+```
+
+`build` emits JavaScript and declarations into `dist/`; `build:site` writes
+the browser workshop to `site-dist/`. `prepack` runs the library build.
+For the TypeScript 7 upgrade, the four library output files were byte-identical
+to the TypeScript 5.9.3 build (observed October 6, 2026 with `diff -ru`).
+
+## Release staging
+
+The [Release workflow](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/release.yml) is the npm trusted
+publisher for this repository. Prepare a release by updating `package.json`,
+`package-lock.json`, this README's release version, the CHANGELOG, and the
+workshop's version badge. Run the development checks above, commit and push
+main, and wait for CI to pass. Then tag that same commit `v<package-version>`
+and push that specific tag.
+
+The tag triggers verification and `npm stage publish --provenance` through
+GitHub Actions OIDC. A successful staging step prints the package version and
+stage ID. The package becomes public only after the owner approves the staged
+release on npmjs.com with 2FA. Keep npm staging in this workflow.
 
 ## License
 

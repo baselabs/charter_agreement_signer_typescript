@@ -63,7 +63,7 @@
     <p class="custody-note"><svg class="ic"><use href="#i-lock"/></svg> Both parties’ keys stay in this page’s custody —
     <span id="custody-mode" class="pill"></span></p>
     <ul class="badges">
-      <li>npm 0.2.0</li><li>byte-exact · RFC 8785 canonical</li><li>Ed25519 + ML-DSA (PQ)</li>
+      <li>signer 0.2.2</li><li>byte-exact · RFC 8785 canonical</li><li>Ed25519 workshop · ML-DSA in Node</li>
     </ul>
   </div>
 </section>
@@ -94,8 +94,8 @@
       <h3>It never decides for you.</h3>
       <p class="pain">“Verification” tools that whisper “valid — go ahead” are quietly making
       your business decision.</p>
-      <p class="answer"><svg class="ic"><use href="#i-check"/></svg> CAP’s facts always carry a <strong>closed twelve-item
-      not_verified floor</strong> — authority, billing, legal validity — that no API can shrink.
+      <p class="answer"><svg class="ic"><use href="#i-check"/></svg> CAP returns <strong>structural verification facts</strong>.
+      Your application decides authority, billing, legal validity, and whether an action may run.
       You read the evidence; you decide.</p>
     </article>
   </div>
@@ -105,8 +105,8 @@
   <div class="sec-head">
     <h2>The charter workshop</h2>
     <p>Everything is live: this page bundles the real signer and verifier packages. Two parties’
-    keys are generated in your browser; four real artifacts get signed, verified, and — if you
-    like — broken.</p>
+    keys are generated in your browser; descriptors, acceptances, and a receipt get signed
+    and post-verified against a canonical charter revision.</p>
     <button id="reset" class="btn subtle"><svg class="ic"><use href="#i-key"/></svg> New keys · reset</button>
   </div>
 
@@ -122,7 +122,7 @@
         <div><dt>each party signs</dt><dd>a descriptor pinning its key (<code>cap+party</code>)</dd></div>
         <div><dt>the charter</dt><dd>a canonical revision: terms, parties, window</dd></div>
       </dl>
-      <button id="btn-form" class="btn actorbtn issuer"><svg class="ic"><use href="#i-seal"/></svg> Sign descriptors + revision</button>
+      <button id="btn-form" class="btn actorbtn issuer"><svg class="ic"><use href="#i-seal"/></svg> Sign descriptors + create revision</button>
       <div class="step-slots">
         <div class="card-slot" id="slot-desc-a" data-empty="party A descriptor"></div>
         <div class="card-slot" id="slot-desc-b" data-empty="party B descriptor"></div>
@@ -147,7 +147,7 @@
 
     <article class="lane verifier" id="lane-verify">
       <header><svg class="ic"><use href="#i-shield"/></svg> Verify <span class="role-badge">anyone, offline</span></header>
-      <button id="btn-verify" class="btn actorbtn verifier" disabled><svg class="ic"><use href="#i-shield"/></svg> verifyChain (the whole set)</button>
+      <button id="btn-verify" class="btn actorbtn verifier" disabled><svg class="ic"><use href="#i-shield"/></svg> verifyChain (charter view)</button>
       <div class="verdict" id="verdict" data-state="idle">
         <span class="verdict-mark"><svg class="ic"><use href="#i-terminal"/></svg></span>
         <span class="verdict-text">verify the set to see the structural facts</span>
@@ -157,13 +157,13 @@
   </div>
 
   <div class="tamper">
-    <div class="panel-head"><div class="panel-badge"><svg class="ic"><use href="#i-wire"/></svg></div><div class="panel-titles"><span class="panel-title">Tamper deck</span><span class="panel-sub">Rewrite the past — every attempt fails closed.</span></div></div>
+    <div class="panel-head"><div class="panel-badge"><svg class="ic"><use href="#i-wire"/></svg></div><div class="panel-titles"><span class="panel-title">Evidence checks</span><span class="panel-sub">Revision and key edits fail verification; receipts are checked separately.</span></div></div>
     <div class="tamper-btns">
       <button class="btn danger" data-tamper="revision" disabled>Rewrite the legal text after acceptance</button>
       <button class="btn danger" data-tamper="descriptor" disabled>Swap a party's key under the same name</button>
-      <button class="btn danger" data-tamper="receipt" disabled>Verify without the acting receipt</button>
+      <button class="btn danger" data-tamper="receipt" disabled>Recheck charter without the receipt</button>
     </div>
-    <p class="hint" id="tamper-hint">Form, accept, and act first — then rewrite history.</p>
+    <p class="hint" id="tamper-hint">Form, accept, and act first — then check the evidence bindings.</p>
   </div>
 
   <div class="wireviewer">
@@ -178,7 +178,7 @@
   <div class="lifecycle">
 <a class="lstep" href="https://baselabs.github.io/agent_blueprint_protocol/"><span class="lmark"><i>[</i>ABP<i>]</i></span><div><b>Define the agent</b><small>Blueprint Core + Deployment Manifest — identity, bounds that only narrow, evidence commitments, pinned to one release digest</small></div></a>
     <div class="larrow">→</div>
-<span class="lstep now"><span class="lmark"><i>[</i>CAP<i>]</i></span><div><b>Agree the terms</b><small>Charter revisions bind ABP release digests (abp_bindings); every receipt records the action’s deployment digest — signed by both parties</small></div></span>
+<span class="lstep now"><span class="lmark"><i>[</i>CAP<i>]</i></span><div><b>Agree the terms</b><small>Charter revisions bind ABP release digests (abp_bindings); both parties sign acceptances, and the issuing party signs each receipt with the action’s deployment digest</small></div></span>
     <div class="larrow">→</div>
 <a class="lstep" href="https://baselabs.github.io/bounded_authority_protocol/"><span class="lmark"><i>[</i>BAP<i>]</i></span><div><b>Authorize each request</b><small>Issuer-signed grants + holder proofs govern every call, per request — the authority layer over OAuth</small></div></a>
   </div>
@@ -189,8 +189,8 @@
     <article><svg class="ic big"><use href="#i-lock"/></svg><h3>Custody boundary</h3>
       <p>One handle, two callbacks — atomic key snapshot and sign. The private key never enters: not the library, not this page’s bundles.</p></article>
     <article><svg class="ic big"><use href="#i-seal"/></svg><h3>Honest-signer refusals</h3>
-      <p>R1–R3: the signer refuses to sign claims it cannot honestly make — wrong chain, mismatched digest — before the key is ever touched.</p></article>
-    <article><svg class="ic big"><use href="#i-alert"/></svg><h3>Wrong-key guard</h3>
+      <p>R1–R3: the signer refuses to sign claims it cannot honestly make — wrong chain, mismatched digest — after resolving the key snapshot, before the signing callback runs.</p></article>
+    <article><svg class="ic big"><use href="#i-shield"/></svg><h3>Wrong-key guard</h3>
       <p>Every signature is verified against the snapshot’s public key before the artifact leaves — a custodian misconfiguration fails loudly.</p></article>
     <article><svg class="ic big"><use href="#i-x"/></svg><h3>PQ-ready</h3>
       <p>Ed25519 today, ML-DSA descriptors from protocol revision 3 — the post-quantum lane is in the registry, not a promise.</p></article>

@@ -348,14 +348,14 @@ function verifyWorld(w: { revisions: string[]; acceptances: string[]; descriptor
     setVerdict("ok", "CHAIN VERIFIED — structural facts returned");
     $("facts-body").innerHTML = rawJsonBox(at.facts);
     $("tamper-hint").className = "hint";
-    $("tamper-hint").textContent = "Now break it — every button below produces a real refusal.";
+    $("tamper-hint").textContent = "Revision and key edits fail verification. Rechecking without the receipt verifies the charter only; verifyReceipt checks receipts separately.";
   } else {
     setVerdict("fail", `VERIFICATION FAILED — <b>${(at as { code?: string }).code ?? "invalid"}</b>`);
     $("facts-body").innerHTML = rawJsonBox(at);
     $("tamper-hint").className = "hint fail";
     const why: Record<string, string> = {
       revision: "the revision bytes changed after acceptance — the digest bindings no longer match",
-      receipt: "the receipt claims a different revision than the one the acceptances govern",
+      receipt: "the charter view failed verification; verifyReceipt checks receipts separately",
       descriptor: "the issuer's descriptor was re-signed by a different key — identity binding failed",
     };
     const w = lastTamper ? why[lastTamper] : undefined;
@@ -367,7 +367,7 @@ function verifyWorld(w: { revisions: string[]; acceptances: string[]; descriptor
 function doVerify(): void {
   lastTamper = null;
   verifyWorld(view(), "full set");
-  showWire("receipt (as verified)", receipt);
+  showWire("receipt (post-verified when signed)", receipt);
 }
 
 async function tamper(kind: string): Promise<void> {
@@ -381,7 +381,7 @@ async function tamper(kind: string): Promise<void> {
     return;
   }
   if (kind === "receipt") {
-    verifyWorld({ revisions: [genesisText], acceptances: view().acceptances, descriptors: view().descriptors, terminations: [] }, "receipt mismatch");
+    verifyWorld({ revisions: [genesisText], acceptances: view().acceptances, descriptors: view().descriptors, terminations: [] }, "charter without receipt");
     return;
   }
   if (kind === "descriptor") {
