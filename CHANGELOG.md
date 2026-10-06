@@ -3,6 +3,18 @@
 All notable public changes to `@charter-agreement-protocol/signer` are
 documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Update the build compiler from TypeScript 5.9.3 to 7.0.2 (`^7.0.2`),
+  removing the `~5.9.0` pin; update `@types/node` to 26.6.4 (`^26.6.4`).
+- Observed on October 6, 2026: `npm ci`, `typecheck`, all 18 tests, `build`,
+  `typecheck:web`, `build:site`, and `npm pack --dry-run` pass.
+  `diff -ru` against the TypeScript 5.9.3 baseline reports no differences:
+  all four emitted JavaScript and declaration files are byte-identical.
+  `npm outdated --json` returns `{}`.
+
 ## [0.2.1] — 2026-09-24
 
 Dependency-line release: this package now tracks the published verify
