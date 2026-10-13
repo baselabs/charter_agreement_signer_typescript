@@ -7,12 +7,12 @@ Holder-side companion signer for the
 
 **CAP verifies; it never authorizes. This signer signs; it never takes
 custody.** You keep the key (HSM, OS keychain, key server) behind a handle
-with two callbacks. The signer resolves the algorithm, takes one atomic
-`keyIdentity` snapshot, and calls the verifier package's producers for
-RFC 7515 framing, the claims gate and the R1–R3 honest-signer refusal
-checks before signing. After the callback signs, it checks the signature
-against the snapshot public key, assembles through the verifier package,
-and verifies the artifact against the supplied context.
+with two callbacks. The signer resolves limits, profile, and algorithm, copies
+claims and context at entry, and takes one atomic `keyIdentity` snapshot.
+The verifier's `prepareSigning` checks framing, claims, context, profile,
+limits, and the holder's own descriptor key before the callback signs.
+The signer checks the signature against the snapshot public key, then calls
+`finishSigning` to assemble and verify under the retained context and settings.
 
 ## Install
 
@@ -20,8 +20,8 @@ and verifies the artifact against the supplied context.
 npm install @charter-agreement-protocol/signer
 ```
 
-Release **0.3.0** requires Node >= 24.8.0 (ML-DSA support in the Node builtins)
-and depends on `@charter-agreement-protocol/verifier` `^0.6.0`.
+Version **0.3.0** requires Node >= 24.8.0 and the verifier 0.7.0 pre-sign API.
+This checkout uses the frozen verifier snapshot at `file:../ts-verifier-070-snap`.
 
 ## Quickstart
 
@@ -78,91 +78,119 @@ callback runs.
 
 | Export | What it does |
 |---|---|
-| `signDescriptor(claims, handle, opts?)` | Signs a genesis Party Descriptor; post-verified via `verifyDescriptor` |
-| `signReceipt(claims, handle, chain, opts?)` | Signs one Receipt against the required issuing view; post-verified via `verifyReceipt` (the reference takes a context, never none) |
-| `signAcceptance(claims, handle, view, opts?)` | Signs one Acceptance against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
-| `signTermination(claims, handle, view, opts?)` | Signs one Termination against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
+| `signDescriptor(claims, handle, opts?)` | Signs a genesis or successor Party Descriptor; successors require `opts.predecessor` |
+| `signReceipt(claims, handle, context, opts?)` | Signs a Receipt against a chain view or bare revision text |
+| `signAcceptance(claims, handle, chain, opts?)` | Signs an Acceptance using the context the verifier derives from the chain |
+| `signTermination(claims, handle, chain, opts?)` | Signs a Termination using the context the verifier derives from the chain |
+| `SigningOptions`, `DescriptorOptions`, `ChainView`, `KeyHandle`, `KeySnapshot`, `SignError`, `SignResult` | Public TypeScript contracts |
 
-The acceptance/termination `view` is `{ revisionText, descriptorCompacts,
-chain }`: the revision the claims name, the signing party's descriptor
-chain, and the caller's full `ChainView` (`{ revisions, acceptances,
-descriptors, terminations }`) the refusal guards verify and bind against.
-The descriptor list holds only the signing party's descriptor history.
-The signer copies the claims, these arrays, the descriptor list and the
-revision text at entry, before awaiting either key callback. Receipts also
-copy their chain arrays at entry.
+A `ChainView` contains four string arrays: `{ revisions, acceptances,
+descriptors, terminations }`. Pass all four, including explicit empty arrays.
+Acceptance and termination use this chain directly. The verifier derives the
+claimed revision and the holder's own descriptor history from its verified
+contents. The signer copies claims, context arrays, options, and predecessor
+lineage at entry, before awaiting a key callback.
 
-`opts` is absent or a plain object whose only key is `algorithm`. Anything
-else (another value, a misspelled or unknown key, a `Map` or class instance,
-a throwing getter) is `invalid_input` with `code: "invalid_type"`, before
-either key callback.
+Migration from the previous issuing view:
 
-Errors are closed: `{ ok: false, error: "invalid_key_handle" \| "signing_failed"
-\| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides
-only on `invalid_input` and `refused`; `verification_failed` is bare
-(no `code` member).
-`"refused"` is the honest-signer refusal: the claims contradict the caller's
-own verified view, and the handle's `sign` callback is never reached (the
-atomic `keyIdentity` snapshot resolves before the producer).
-`"verification_failed"` is the separate post-sign discipline: the assembled
-artifact did not verify against the caller's view (for example a key that is
-not in the party descriptor's `verification_keys`). Malformed claims are
-rejected pre-sign as `"invalid_input"` through the verifier package's
-producer claims gate — they never burn a key operation. A signing failure is
-never a silent pass.
+```ts
+// Before
+await signAcceptance(claims, handle, { revisionText, descriptorCompacts, chain }, opts);
+// Now
+await signAcceptance(claims, handle, chain, opts);
+await signTermination(terminationClaims, handle, chain, opts);
+```
+
+For a successor descriptor, pass the verifier's `DescriptorPredecessor` facts
+with retained signed `lineage`. The signing key must match an active key in
+the predecessor:
+
+```ts
+import { verifyDescriptor } from "@charter-agreement-protocol/verifier";
+
+const previous = verifyDescriptor(genesisCompact);
+if (!previous.ok) throw new Error(previous.code);
+const next = await signDescriptor(successorClaims, handle, { predecessor: previous.facts });
+```
+
+For a receipt against bare revision text, the verifier checks the receipt's
+claims against that revision. The revision names no signing key, so the signer
+uses its snapshot for the custody guard; receipt verification reports
+`signature` in `not_verified`. A chain-backed receipt checks the key against
+the issuing party's descriptor keys in the holder's own view.
+
+`opts` is absent or a plain object with known keys only: `algorithm`, `limits`,
+and `profile`, plus `predecessor` for `signDescriptor`. Another value, an
+unknown key, a `Map`, a class instance, or a throwing getter returns
+`invalid_input` with `code: "invalid_type"`.
+
+`limits` is the verifier's `Partial<Limits>` and `profile` is its `Profile`.
+Malformed values return `invalid_input` with `invalid_limits` or
+`invalid_profile`, in that order, before the algorithm or key snapshot is
+resolved. Limits bound the final compact, including signature bytes, and
+every context artifact read; raised limits also apply to assembly and the
+custody guard. Profiles can restrict `algorithms` and/or
+`revisions: { min, max }`; an omitted axis keeps the full supported range.
+An EdDSA-only profile, an ML-DSA-44/87-only profile, or revisions 1..1 excludes
+every artifact this signer emits. Exclusions return `algorithm_outside_profile`
+or `revision_outside_profile`, whether they concern the new artifact or context.
+
+In the frozen snapshot, acceptance and termination apply the caller's profile
+to the claimed revision, the holder's descriptor history, and the new artifact;
+the other entries in the set are checked under the default profile. Receipt
+profiles cover the full chain, and descriptor profiles cover predecessor
+history. The snapshot's acceptance/termination scope differs from the required
+full-set profile check.
+
+Errors are closed:
+
+| Result error | Meaning |
+|---|---|
+| `invalid_input`, with `code` | The verifier rejected claims, context, limits, or profile, or options were invalid |
+| `invalid_key_handle` | The snapshot callback failed, its shape was malformed, or the verifier returned `signing_key_invalid` |
+| `refused`, with `code: "signing_refused"` | The claims contradict the holder's own verified view (R1–R3) |
+| `refused`, with `code: "signing_key_mismatch"` | The kid, public key bytes, or key algorithm does not match the holder's own descriptor key |
+| `algorithm_unsupported_on_substrate` | The runtime cannot verify the selected algorithm or a context artifact |
+| `signing_failed` | The callback failed, returned a malformed signature, or failed the wrong-key guard |
+| `verification_failed` | `finishSigning` rejected what preparation approved |
+
+Every failure has `ok: false`. Only `invalid_input` and `refused` carry `code`.
+All pre-sign rejections leave the `sign` callback untouched; the atomic key
+snapshot precedes `prepareSigning`. A malformed context type returns
+`invalid_input`/`invalid_type`. A successor without a valid predecessor returns
+`invalid_input`/`descriptor_chain_invalid` before signing.
 
 ## The sibling verifier
 
 The signer and verifier are separate TypeScript packages implementing the
 Charter Agreement Protocol, with no Elixir dependency at runtime. The
 verifier ships a corpus certified against the Elixir protocol reference.
-This signer tests its artifacts through the published TypeScript verifier.
-
-- **This package** — `@charter-agreement-protocol/signer`: key custody,
-  the wrong-key guard, post-sign verification, and the closed error
-  vocabulary — all protocol logic delegated to the verifier.
-- [`@charter-agreement-protocol/verifier`](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
-  — verification and the pure producer surface (signing inputs, claims
-  gate, refusal guards, assembly) that this package signs through.
-
-This signer depends on the verifier (`^0.6.0`, locked to 0.6.0). When changing
-that dependency, publish the verifier version first, then lock and release
-the signer against the published version. The packages have independent
-SemVer versions; signer documentation and build-tool updates can release
-without a verifier version change.
+This signer tests its artifacts through the TypeScript verifier snapshot.
+All protocol checks run in `prepareSigning` and `finishSigning`; the signer
+keeps key custody callbacks, the signature guard, entry copies, option
+resolution, and the closed error vocabulary.
 
 ## Evidence
 
 - Linux CI runs the suite on Node 24.8.0 and the current Node 24 line.
-  Real Node crypto mints Ed25519 and ML-DSA-65 genesis descriptors. A
-  bundle using the workshop's browser shims mints Ed25519. On that bundle,
-  which cannot verify ML-DSA-65, an ML-DSA-65 request reaches the key and then
-  fails the wrong-key guard with `signing_failed`; the shim's verifier reports
-  `algorithm_unsupported_on_substrate` for an ML-DSA-65 artifact.
-- This repository does not run an Elixir cross-check. The Elixir signer pins
-  this repository at a public commit, runs this package's own test suite and
-  checks that a descriptor this package signs verifies under the Elixir CAP.
-  It does not compare what the two signers produce or refuse, so it does not
-  establish parity.
-- Framing, the producer claims gate, refusal guards, and assembly are the
-  verifier package's producer surface (0.6.0). What remains here is
-  custody plus input policing: the issuing-view discipline composes the
-  verifier's own `verifyChain`, never a local reimplementation.
-- Post-sign verification goes through the
-  [@charter-agreement-protocol/verifier](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
-  package. The signer has no shared cross-runtime error or byte-comparison
-  suite.
+  Real Node crypto mints Ed25519 and ML-DSA-65 genesis and successor descriptors.
+  Pre-sign rejection tests count real signing calls and require zero calls.
+  Tests cover key mismatches, predecessor checks, malformed contexts, profiles,
+  final compact limits, receipt claims, entry copies, and unknown algorithms.
+- The workshop's browser bundle mints Ed25519 and runs the complete workshop
+  flow. It cannot verify ML-DSA-65 and refuses that request before signing with
+  the top-level `algorithm_unsupported_on_substrate` error.
+- This repository does not run an Elixir cross-check or a shared cross-runtime
+  error or byte-comparison suite. Its tests do not establish signer parity.
 
 ## Verifier compatibility and telemetry
 
-This package uses verifier `^0.6.0`, locked to 0.6.0. That version requires
-canonical digests and revision JSON, distinct party histories and all four
-chain arrays. Producer build failures surface as `invalid_input` with
-`code: "signing_input_invalid"`; termination claims must omit `extensions`.
+The verifier requires canonical digests and revision JSON, distinct party
+histories, and all four chain arrays. Build failures surface as `invalid_input`
+with `code: "signing_input_invalid"`; termination claims must omit `extensions`.
 See [CHANGELOG.md](CHANGELOG.md) for migration notes.
 
-The signer options expose the emission algorithm. This package has no
-telemetry events or hooks, signer capability report or profile option.
+This package has no telemetry events or hooks and no signer capability report.
 
 ## SemVer
 

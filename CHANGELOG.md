@@ -5,88 +5,99 @@ documented here.
 
 ## [Unreleased]
 
-### Added
-
-- Add `SECURITY.md`, `CODE_OF_CONDUCT.md` and `CONTRIBUTING.md`, following
-  the Elixir signer's reporting policy, Contributor Covenant and
-  contribution practices, with this package's commands and checks. Include
-  all three documents in the npm package.
-- Real Node crypto tests mint Ed25519 and ML-DSA-65 genesis descriptors.
-  Browser bundle tests use the workshop's crypto shim to mint Ed25519. On
-  that bundle an ML-DSA-65 request reaches the key and then fails the
-  wrong-key guard with `signing_failed`; the shim verifier reports
-  `algorithm_unsupported_on_substrate` for an ML-DSA-65 artifact.
-- Snapshot regression tests keep the existing non-empty decoded-key and
-  string-type checks intact. CI runs the suite on Linux with Node 24.8.0
-  and the current Node 24 line.
-
 ### Breaking
 
-- Rename the handle error from `invalid_handle` to `invalid_key_handle`.
-  Migration: update error comparisons and exhaustive switches to the new
-  string. The result shape is unchanged.
-- Options must be absent or a plain object whose only key is `algorithm`.
-  Anything else returns `invalid_input` with `code: "invalid_type"` before
-  either key callback: `null`, a number, an array, a bare algorithm string,
-  a misspelled or unknown key, a `Map` or class instance, or a throwing
-  getter. These used to fall back to the defaults silently, so a misspelled
-  `algorithm` key signed with Ed25519. Migration: pass `{ algorithm }` or
-  nothing.
+- `signAcceptance` and `signTermination` now take `(claims, keyHandle, chain,
+  opts)`. The verifier derives context from that chain; `revisionText` and
+  `descriptorCompacts` are removed from the signer input. Migration:
+
+  ```ts
+  // Before
+  await signAcceptance(claims, keyHandle, { revisionText, descriptorCompacts, chain }, opts);
+  // Now
+  await signAcceptance(claims, keyHandle, chain, opts);
+  await signTermination(terminationClaims, keyHandle, chain, opts);
+  ```
+
+- The holder's own descriptor key is checked before signing. A wrong kid,
+  public key, or key algorithm returns
+  `{ ok: false, error: "refused", code: "signing_key_mismatch" }`.
+  `signing_key_invalid` maps to `invalid_key_handle`. Missing or invalid
+  successor predecessors return `invalid_input`/`descriptor_chain_invalid`.
+- Context, claims/context mismatches, profile exclusions, and compact size
+  limits reject before the signing callback. Missing or malformed context
+  types return `invalid_input`/`invalid_type`; malformed sets preserve the
+  verifier's code, including `compact_invalid`. `verification_failed` now
+  means only that `finishSigning` rejected what preparation approved.
+- Unavailable crypto returns the top-level
+  `{ ok: false, error: "algorithm_unsupported_on_substrate" }` before signing,
+  including an ML-DSA-65 request on the browser bundle.
+- Rename `invalid_handle` to `invalid_key_handle`. Update error comparisons
+  and exhaustive switches; the result shape is unchanged. Add the new substrate
+  error and refusal code to exhaustive handling.
+- Options must be absent or a plain object containing only `algorithm`,
+  `limits`, `profile`, and (for `signDescriptor`) `predecessor`. Unknown keys,
+  non-plain objects, and unreadable getters return `invalid_input`/`invalid_type`.
+  Malformed limits and profiles preserve `invalid_limits` and `invalid_profile`.
+
+### Added
+
+- `signDescriptor` accepts the verifier's `DescriptorPredecessor` as
+  `opts.predecessor`, with retained signed `lineage`, for successor descriptors.
+- All four functions accept verifier `limits` and `profile` options. Limits
+  include the final compact and context artifacts and also apply to the custody
+  guard and completion. Profiles check the new artifact and retained context.
+- `signReceipt` accepts bare revision text as well as a chain view. With a
+  bare revision, the custody guard checks the snapshot key and verifier facts
+  list `signature` in `not_verified`.
+- Export `SigningOptions` and `DescriptorOptions`. Real-key tests cover
+  Ed25519 and ML-DSA-65 successors and pre-sign refusals, with zero signing calls
+  asserted on rejection. The browser bundle test runs the complete workshop flow.
+- Include `SECURITY.md`, `CODE_OF_CONDUCT.md`, and `CONTRIBUTING.md` in the
+  npm package with this package's reporting and contribution practices.
 
 ### Changed
 
-- SECURITY.md sends reports through GitHub private vulnerability reporting, now
-  enabled for this repository.
-- Set package and lockfile versions to 0.3.0 and update the workshop badge.
-- Correct the 0.2.1 release note's unshipped capability and profile claim.
-  README now describes the tests that run: this repository has no Elixir
-  cross-check, and the Elixir signer, which pins this repository at a public
-  commit and runs this package's suite, does not compare the two signers'
-  output, so no parity is established. This package has no telemetry.
-- Copy the claims at entry too, so a key callback cannot change what is
-  framed after its snapshot. The copy reads plain objects and arrays
-  through property access, so Proxy-backed state (Vue, MobX, Immer) is
-  copied too.
-- `npm run build` removes `dist/` first, so a local pack cannot ship stale
-  modules. CI also typechecks and builds the workshop site, and a test runs
-  the workshop's signing flow bundled with the site's browser shims.
-- Copy the caller's chain arrays and acceptance/termination issuing view
-  at entry, before the first `await`. Key callbacks cannot change the
-  context used by the producers or post-sign verification.
-- Resolve the algorithm before calling `keyIdentity`. Absent, `undefined`
-  and `null` select Ed25519; supported explicit values are `Ed25519` and
-  `ML-DSA-65`. Other values, including non-strings, return `invalid_input`
-  with `code: "algorithm_unsupported"` without using the handle.
-- Use `@charter-agreement-protocol/verifier` `^0.6.0` (locked to 0.6.0).
-  Fixtures hash real bytes, use canonical revision JSON, and count real
-  Ed25519 signing calls.
+- Delegate preparation and completion to verifier 0.7.0's `prepareSigning`
+  and `finishSigning`. Use the frozen local dependency
+  `file:../ts-verifier-070-snap`; remove the signer's context derivation,
+  producer calls, assembly calls, and choice of post-sign verification function.
+- Preserve entry copies of claims and chain arrays and copy limits, profile,
+  and predecessor lineage before the first `await`, including Proxy-backed
+  plain objects. Unreadable entry data returns typed input errors.
+- Resolve limits, then profile, then algorithm, before taking the key snapshot.
+  Absent, `undefined`, and `null` algorithms select Ed25519. Explicit values are
+  `Ed25519` and `ML-DSA-65`; others return `invalid_input`/`algorithm_unsupported`
+  before either callback. The snapshot checks only a non-empty string kid and
+  a string public key; the verifier checks key encoding and shape.
+- Keep version 0.3.0 and the workshop badge. Builds remove stale library output;
+  CI typechecks and builds the workshop on Linux with Node 24.8.0 and Node 24.
+- SECURITY.md uses GitHub private vulnerability reporting. Evidence descriptions
+  name the checks that run; this signer has no telemetry or shared cross-runtime
+  comparison suite.
+- In the frozen snapshot, acceptance and termination apply the caller's profile
+  to the routed context and use the default profile for other set entries. This
+  differs from the required full-set profile check. Receipt profiles cover the
+  full chain and descriptor profiles cover predecessor history.
+
+### Migration from CAP 0.4 to 0.5
+
+- Revisions must name two distinct parties from different descriptor histories.
+  Replace fixtures that use one descriptor for both roles with two real parties.
+  Chain views supply explicit `revisions`, `acceptances`, `descriptors`, and
+  `terminations` arrays, including empty lists.
 
 ### Migration from verifier 0.5 to 0.6
 
-- Producer build failures now surface as `invalid_input` with
-  `code: "signing_input_invalid"`, replacing schema-specific codes.
-  Termination claims must omit `extensions` and other extra members.
-- Digests must be canonical base64url SHA-256 values. Revision text must
-  be canonical JSON, and each revision must name two distinct parties.
-  Descriptor public keys must use canonical encodings and the correct
-  byte length. Mixed party histories and unknown claims now reject.
-- Chain views require all four string arrays, including explicit empty
-  arrays. Malformed artifact lists return `invalid_type` through the
-  verifier's producers. The signer's missing-view guard continues to
-  return `signing_input_invalid`.
-- Direct verifier callers must pass verified predecessor facts with
-  retained signed `lineage` to `verifyDescriptor`; `{ digest, claims }`
-  alone no longer works. Genesis calls must omit a predecessor.
-- Direct verification can now apply limits and profiles to context as
-  well as the artifact, and unavailable crypto reports
-  `algorithm_unsupported_on_substrate`. This signer's options expose only
-  the emission algorithm, and its custody guard maps a failed signature
-  check to `signing_failed`.
-- `signAcceptance` and `signTermination` verify the signed artifact against
-  `view.descriptorCompacts`, which must hold only the signing party's
-  descriptor history. Verifier 0.6.0 rejects a list that mixes both parties'
-  histories, so such a call now fails with `verification_failed`. The
-  workshop page passed both parties' descriptors and is corrected.
+- Producer build failures surface as `invalid_input`/`signing_input_invalid`.
+  Termination claims omit `extensions` and other extra members.
+- Digests are canonical base64url SHA-256 values and revision JSON is canonical.
+  Descriptor keys use canonical encodings with the selected algorithm's byte
+  length. Mixed party histories and unknown claims reject.
+- Direct verifier callers pass retained signed `lineage` in predecessor facts
+  to `verifyDescriptor`; `{ digest, claims }` alone is insufficient. Genesis
+  calls omit the predecessor. This signer exposes that predecessor in options.
+- Profiles and limits can reject context as well as the new artifact.
 
 ## [0.2.2] — October 6, 2026
 
@@ -112,11 +123,8 @@ No API change: verifier 0.5.0 added consumer-side surface only (the
 capability probe, the signature registry identity, the descriptor
 timestamp floor, the 104-case corpus); the producer surface this package
 delegates to is unchanged. Typecheck strict, 18/18 tests against the
-resolved 0.5.0. ~~The producer-side capability alignment (mirrored
-`capabilities()` with refuse-before-mint, declared minting metadata,
-profile-bound signing) is the next feature release on this line.~~
-Corrected in 0.3.0: that alignment did not ship in 0.2.2, and this release
-did not add signer capability metadata, profile options or telemetry.
+resolved 0.5.0. Corrected in 0.3.0: 0.2.2 did not add signer capability metadata,
+profile options, or telemetry.
 
 ## [0.2.0] — 2026-09-17
 

@@ -217,8 +217,8 @@
   keyIdentity(handle): { kid, publicKey } | Promise&lt;…&gt;   // ONE atomic snapshot
   sign(message, handle): Uint8Array | Promise&lt;Uint8Array&gt;   // the holder's job
 }
-// Framing, claims gates, and assembly all live in the verifier package's
-// producer surface — exactly one implementation, shared with the reference.</pre>
+// The verifier checks claims, context, and the holder's descriptor key
+// through prepareSigning, then assembles and verifies with finishSigning.</pre>
   <div class="install-row">
     <pre class="code slim">npm i @charter-agreement-protocol/signer    # one runtime dep: the verifier package</pre>
   </div>

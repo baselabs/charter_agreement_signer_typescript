@@ -1,7 +1,7 @@
 {
   "name": "@charter-agreement-protocol/signer",
   "version": "0.3.0",
-  "description": "Holder-side companion signer for the Charter Agreement Protocol (CAP) in TypeScript - key custody only: an atomic key snapshot, the sign callback, the wrong-key guard, and post-sign verification, with framing, the claims gate, the R1-R3 honest-signer refusals, and assembly all delegated to the @charter-agreement-protocol/verifier producer surface. CAP verifies; it never authorizes; this signer signs, it never verifies third-party artifacts or takes custody.",
+  "description": "Holder-side companion signer for the Charter Agreement Protocol (CAP) in TypeScript - key custody only: an atomic key snapshot, the sign callback, the wrong-key guard, and post-sign verification, with framing, claims, context, key matching, limits, profile, and completion delegated to the @charter-agreement-protocol/verifier pre-sign API. CAP verifies; it never authorizes; this signer signs, it never verifies third-party artifacts or takes custody.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
