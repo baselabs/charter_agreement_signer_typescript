@@ -7,15 +7,12 @@ Holder-side companion signer for the
 
 **CAP verifies; it never authorizes. This signer signs; it never takes
 custody.** You keep the key (HSM, OS keychain, key server) behind a handle
-object with two callbacks; the signer resolves ONE atomic `keyIdentity`
-snapshot, then delegates EVERYTHING pure to the verifier package's producer
-surface — the exact RFC 7515 signing input, the producer claims gate, the
-R1–R3 honest-signer refusal guards (claims-truth, no-equivocation,
-ancestry/governing coverage), and assembly — **before the key signs**, with
-exactly one implementation. What stays here is custody: the sign callback,
-the wrong-key guard against the snapshot's public key, and the post-sign
-verification of the assembled artifact through the
-`@charter-agreement-protocol/verifier` package.
+with two callbacks. The signer resolves the algorithm, takes one atomic
+`keyIdentity` snapshot, and calls the verifier package's producers for
+RFC 7515 framing, the claims gate and the R1–R3 honest-signer refusal
+checks before signing. After the callback signs, it checks the signature
+against the snapshot public key, assembles through the verifier package,
+and verifies the artifact against the supplied context.
 
 ## Install
 
@@ -24,7 +21,7 @@ npm install @charter-agreement-protocol/signer
 ```
 
 Release **0.2.2** requires Node >= 24.8.0 (ML-DSA support in the Node builtins)
-and depends on `@charter-agreement-protocol/verifier` `^0.5.0`.
+and depends on `@charter-agreement-protocol/verifier` `^0.6.0`.
 
 ## Quickstart
 
@@ -81,7 +78,7 @@ callback runs.
 
 | Export | What it does |
 |---|---|
-| `signDescriptor(claims, handle, opts?)` | Signs one Party Descriptor; post-verified via `verifyDescriptor` |
+| `signDescriptor(claims, handle, opts?)` | Signs a genesis Party Descriptor; post-verified via `verifyDescriptor` |
 | `signReceipt(claims, handle, chain, opts?)` | Signs one Receipt against the required issuing view; post-verified via `verifyReceipt` (the reference takes a context, never none) |
 | `signAcceptance(claims, handle, view, opts?)` | Signs one Acceptance against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
 | `signTermination(claims, handle, view, opts?)` | Signs one Termination against the caller's verified view — the R1–R3 refusal guards run over `view.chain` before the key signs |
@@ -97,10 +94,10 @@ chain arrays at entry.
 Errors are closed: `{ ok: false, error: "invalid_key_handle" \| "signing_failed"
 \| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides
 only on `invalid_input` and `refused`; `verification_failed` is bare
-(reference parity).
+(no `code` member).
 `"refused"` is the honest-signer refusal: the claims contradict the caller's
 own verified view, and the handle's `sign` callback is never reached (the
-atomic `keyIdentity` snapshot resolves first — the reference ordering).
+atomic `keyIdentity` snapshot resolves before the producer).
 `"verification_failed"` is the separate post-sign discipline: the assembled
 artifact did not verify against the caller's view (for example a key that is
 not in the party descriptor's `verification_keys`). Malformed claims are
@@ -110,11 +107,10 @@ never a silent pass.
 
 ## The sibling verifier
 
-This package is one of two independent TypeScript siblings implementing the
-Charter Agreement Protocol — no Elixir code or dependency at runtime; the
-Elixir reference is the certification oracle (the verifier's vendored
-corpus is certified against it, and its CI cross-verifies
-TypeScript-signed artifacts from raw bytes).
+The signer and verifier are separate TypeScript packages implementing the
+Charter Agreement Protocol, with no Elixir dependency at runtime. The
+verifier ships a corpus certified against the Elixir protocol reference.
+This signer tests its artifacts through the published TypeScript verifier.
 
 - **This package** — `@charter-agreement-protocol/signer`: key custody,
   the wrong-key guard, post-sign verification, and the closed error
@@ -123,7 +119,7 @@ TypeScript-signed artifacts from raw bytes).
   — verification and the pure producer surface (signing inputs, claims
   gate, refusal guards, assembly) that this package signs through.
 
-This signer depends on the verifier (`^0.5.0`, locked to 0.5.0). When changing
+This signer depends on the verifier (`^0.6.0`, locked to 0.6.0). When changing
 that dependency, publish the verifier version first, then lock and release
 the signer against the published version. The packages have independent
 SemVer versions; signer documentation and build-tool updates can release
@@ -131,25 +127,32 @@ without a verifier version change.
 
 ## Evidence
 
-- The Elixir reference repository's gate verifies TypeScript-signed
-  artifacts from raw bytes (cross-implementation agreement, enforced in CI).
+- Linux CI runs the suite on Node 24.8.0 and the current Node 24 line.
+  Real Node crypto mints Ed25519 and ML-DSA-65 genesis descriptors. A
+  bundle using the workshop's browser shims mints Ed25519 and refuses
+  ML-DSA-65; the current signer returns `signing_failed` for that refusal.
+- This repository does not run an Elixir cross-check. The Elixir signer's
+  existing check uses its older in-tree TypeScript copy, so it does not
+  establish parity for this package.
 - Framing, the producer claims gate, refusal guards, and assembly are the
-  verifier package's producer surface (0.5.0) — the same single
-  implementation the independent verifier certifies. What remains here is
+  verifier package's producer surface (0.6.0). What remains here is
   custody plus input policing: the issuing-view discipline composes the
   verifier's own `verifyChain`, never a local reimplementation.
 - Post-sign verification goes through the
   [@charter-agreement-protocol/verifier](https://www.npmjs.com/package/@charter-agreement-protocol/verifier)
-  package — the certified dual-implementation-verified verifier.
+  package. The signer has no shared cross-runtime error or byte-comparison
+  suite.
 
-## The verify side
+## Verifier compatibility and telemetry
 
-This package tracks the published verify line: it depends on
-`@charter-agreement-protocol/verifier` `^0.5.0`. Verifier 0.5.0 added
-consumer-side surface only; the producer surface this package uses is
-unchanged. The producer-side capability alignment (mirrored
-`capabilities()` with refuse-before-mint, declared minting metadata,
-profile-bound signing) is the next feature release on this line.
+This package uses verifier `^0.6.0`, locked to 0.6.0. That version requires
+canonical digests and revision JSON, distinct party histories and all four
+chain arrays. Producer build failures surface as `invalid_input` with
+`code: "signing_input_invalid"`; termination claims must omit `extensions`.
+See [CHANGELOG.md](CHANGELOG.md) for migration notes.
+
+The signer options expose the emission algorithm. This package has no
+telemetry events or hooks, signer capability report or profile option.
 
 ## SemVer
 
@@ -164,8 +167,8 @@ or changes behavior.
 ## Development
 
 Use Node 24 (at least 24.8.0) and npm. The lockfile selects TypeScript 7.0.2
-and `@types/node` 26.6.4. CI runs on Linux with Node 24 and a frozen install;
-the same npm commands are used for local development on macOS and Linux.
+and `@types/node` 26.6.4. CI runs on Linux with Node 24.8.0 and Node 24
+using a frozen install; the same npm commands are used for local development on macOS and Linux.
 
 ```console
 npm ci

@@ -7,6 +7,10 @@ documented here.
 
 ### Added
 
+- Add `SECURITY.md`, `CODE_OF_CONDUCT.md` and `CONTRIBUTING.md`, following
+  the Elixir signer's reporting policy, Contributor Covenant and
+  contribution practices, with this package's commands and checks. Include
+  all three documents in the npm package.
 - Real Node crypto tests mint Ed25519 and ML-DSA-65 genesis descriptors.
   Browser bundle tests use the workshop's crypto shim to mint Ed25519 and
   refuse ML-DSA-65. The current signer reports that refusal as
@@ -24,15 +28,17 @@ documented here.
 
 ### Changed
 
+- Correct the 0.2.1 release note's unshipped capability and profile claim.
+  README now describes the tests that run: this repository has no Elixir
+  cross-check, and the Elixir signer's in-tree TypeScript check does not
+  establish parity for this npm package. This package has no telemetry.
 - Copy the caller's chain arrays and acceptance/termination issuing view
   at entry, before the first `await`. Key callbacks cannot change the
   context used by the producers or post-sign verification.
-
 - Resolve the algorithm before calling `keyIdentity`. Absent, `undefined`
   and `null` select Ed25519; supported explicit values are `Ed25519` and
   `ML-DSA-65`. Other values, including non-strings, return `invalid_input`
   with `code: "algorithm_unsupported"` without using the handle.
-
 - Use `@charter-agreement-protocol/verifier` `^0.6.0` (locked to 0.6.0).
   Fixtures hash real bytes, use canonical revision JSON, and count real
   Ed25519 signing calls.
@@ -83,9 +89,8 @@ No API change: verifier 0.5.0 added consumer-side surface only (the
 capability probe, the signature registry identity, the descriptor
 timestamp floor, the 104-case corpus); the producer surface this package
 delegates to is unchanged. Typecheck strict, 18/18 tests against the
-resolved 0.5.0. The producer-side capability alignment (mirrored
-`capabilities()` with refuse-before-mint, declared minting metadata,
-profile-bound signing) is the next feature release on this line.
+resolved 0.5.0. This release did not add signer capability metadata,
+profile options or telemetry.
 
 ## [0.2.0] — 2026-09-17
 

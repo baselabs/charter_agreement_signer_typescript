@@ -15,10 +15,13 @@
   },
   "files": [
     "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
     "dist",
     "LICENSE",
     "NOTICE",
-    "README.md"
+    "README.md",
+    "SECURITY.md"
   ],
   "engines": {
     "node": ">=24.8.0"

@@ -4,8 +4,7 @@
 // exercise the full custody path per artifact kind —
 // snapshot → producer (provisional framing + refusals) → sign → wrong-key
 // guard → assemble → post-sign verify through the verifier package. The
-// Elixir-repo gate separately proves these TS-signed artifacts verify under
-// the Elixir reference implementation.
+// These tests verify through the published TypeScript verifier.
 import assert from "node:assert/strict";
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from "node:crypto";
 import { before, test } from "node:test";
@@ -31,16 +30,14 @@ import {
 function ed25519FromSeed(seed: Buffer) {
   const der = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
   const privateKey = createPrivateKey({ key: der, format: "der", type: "pkcs8" });
-  return { privateKey, publicKey: seed };
+  return { privateKey };
 }
 
 function rawKeyHandle(seed: Buffer, kid: string): { handle: unknown } {
   const keys = ed25519FromSeed(seed);
   const handle: KeyHandle = {
     keyIdentity(_h: unknown) {
-      // The snapshot's public key is the SEED-derived public key; derive it
-      // by signing once is wrong — instead compute from the private handle
-      // via a verify round-trip is unavailable, so use node's derived public.
+      // Derive the public key from the held private KeyObject.
       return { kid, publicKey: derivedPublic(keys.privateKey) };
     },
     sign(message: Uint8Array, _h: unknown) {
