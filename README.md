@@ -200,8 +200,13 @@ resolution, and the closed error vocabulary.
 - The workshop's browser bundle mints Ed25519 and runs the complete workshop
   flow. It cannot verify ML-DSA-65 and refuses that request before signing with
   the top-level `algorithm_unsupported_on_substrate` error.
-- This repository does not run an Elixir cross-check or a shared cross-runtime
-  error or byte-comparison suite. Its tests do not establish signer parity.
+- The [shared table](test/fixtures/README.md) runs all 118 rows from the Elixir
+  signer at `b211f3c`, with its exact source bytes pinned by SHA-256. Real seed
+  keys check result shapes and codes, snapshot and custody counts, 12 exact
+  Ed25519 success compacts, and five ML-DSA-65 successes through verification.
+  All rows are expressible in TS. Eight shared requests or contexts that need
+  ML-DSA-65 also return a substrate error before custody in the browser bundle.
+  This compares the recorded Elixir outcomes; it does not run Elixir locally.
 
 ## Verifier compatibility and telemetry
 
@@ -232,6 +237,7 @@ using a frozen install; the same npm commands are used for local development on 
 npm ci
 npm run typecheck
 npm test
+npm run test:cases
 npm run build
 npm run typecheck:web
 npm run build:site

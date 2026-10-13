@@ -62,6 +62,12 @@ documented here.
   asserted on rejection. The browser bundle test runs the complete workshop flow.
 - Include `SECURITY.md`, `CODE_OF_CONDUCT.md`, and `CONTRIBUTING.md` in the
   npm package with this package's reporting and contribution practices.
+- Run the shared Elixir signer table from `b211f3c`, copied byte for byte with
+  a SHA-256 check. All 118 rows use real seed keys and compare result shapes,
+  codes, snapshot counts, and custody counts. Twelve Ed25519 successes match
+  exact compacts; five ML-DSA-65 successes pass public verification. The explicit
+  list of unexpressible rows is empty, and the run count is asserted. Eight
+  shared requests or contexts needing ML-DSA-65 refuse before browser custody.
 
 ### Changed
 
@@ -90,8 +96,7 @@ documented here.
 - Keep version 0.3.0 and the workshop badge. Builds remove stale library output;
   CI typechecks and builds the workshop on Linux with Node 24.8.0 and Node 24.
 - SECURITY.md uses GitHub private vulnerability reporting. Evidence descriptions
-  name the checks that run; this signer has no telemetry or shared cross-runtime
-  comparison suite.
+  name the checks that run; this signer has no telemetry.
 - For acceptance and termination, the caller's profile covers the claimed
   revision, the signing party's own descriptor history, and the new artifact.
   The rest of the set is checked under the full default profile. A receipt's

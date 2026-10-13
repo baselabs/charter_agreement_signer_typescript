@@ -52,12 +52,11 @@ plain messages unless the maintainer asks otherwise. Do not use `git stash`.
   or handles that return invented signatures.
 - Search for tests of the old contract before changing behavior.
 
-This repository does not run an Elixir cross-check. The Elixir signer pins
-this repository at a public commit, runs this package's own test suite and
-checks that a descriptor this package signs verifies under the Elixir CAP.
-It does not compare what the two signers produce or refuse, so it does not
-certify parity. The local suite verifies artifacts through the
-published TypeScript verifier.
+The local suite runs the [shared signer table](test/fixtures/README.md)
+against this checkout's frozen TypeScript verifier build. It compares recorded
+Elixir outcomes and exact Ed25519 compacts with real seed keys, then checks
+every success through verification. It does not execute Elixir locally.
+Keep the source table byte for byte and report disagreements with both outcomes.
 
 ## Protocol dependency changes
 

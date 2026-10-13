@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { signDescriptor, type KeyHandle } from "./signer.ts";
+import { sharedTable, runCase } from "./test/signer-cases.ts";
 
 let bundleDirectory: string;
 // The workshop flow (web/flow.ts) is typechecked under the browser target
@@ -94,6 +95,22 @@ test("the browser shim refuses ML-DSA-65 before signing and reports the substrat
   const result = await browser.signDescriptor(fixture.claims, fixture.handle, { algorithm: "ML-DSA-65" });
   assert.deepEqual(result, { ok: false, error: "algorithm_unsupported_on_substrate" });
   assert.equal(fixture.signs(), 1);
+});
+
+test("shared ML-DSA-65 requests and contexts refuse before browser custody", async () => {
+  const rows = sharedTable.cases.filter((row) => row.expected_limited ||
+    sharedTable.keys[row.key].algorithm === "ML-DSA-65" && row.expected.shape === "ok");
+  assert.equal(rows.length, 8);
+  let runRows = 0;
+  for (const row of rows) {
+    const { result, counts } = await runCase(row, browser);
+    const evidence = `${row.id}: ${JSON.stringify({ result, counts })}`;
+    assert.deepEqual(result, { ok: false, error: "algorithm_unsupported_on_substrate" }, evidence);
+    assert.deepEqual(counts, { snapshots: 1, custody: 0 }, evidence);
+    runRows += 1;
+  }
+  assert.equal(runRows, 8);
+  process.stdout.write(`Shared browser table: ${runRows} ML-DSA-65 requests or contexts refused, 0 custody calls.\n`);
 });
 
 test("the workshop flow, bundled with the site's browser shims, forms, accepts, signs a receipt and verifies", async () => {

@@ -1343,6 +1343,32 @@ test("the verifier checks canonical key encodings and lengths before signing", a
   }
 });
 
+test("Ed25519 point admission rejects invalid snapshot keys on every entry point", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const encoded = (y: bigint, signBit = false) => Buffer.from(
+    (y | (signBit ? 1n << 255n : 0n)).toString(16).padStart(64, "0"), "hex",
+  ).reverse().toString("base64url");
+  const prime = (1n << 255n) - 19n;
+  const rejected = [
+    encoded(prime), encoded(prime + 1n), encoded(2n),
+    encoded(1n, true), encoded(prime - 1n, true),
+    encoded(0n), encoded(1n), encoded(prime - 1n),
+  ];
+  for (const publicKey of rejected) {
+    const counts = { identities: 0, signs: 0 };
+    const handle: KeyHandle = {
+      keyIdentity() { counts.identities += 1; return { kid: "issuer-key-001", publicKey }; },
+      sign(message) { counts.signs += 1; return nodeSign(null, message, keys.privateKey); },
+    };
+    for (const { kind, call } of signingCalls(handle)) {
+      const before = counts.identities;
+      assert.deepEqual(await call({}), { ok: false, error: "invalid_key_handle" }, kind);
+      assert.equal(counts.identities, before + 1, kind);
+      assert.equal(counts.signs, 0, kind);
+    }
+  }
+});
+
 test("signature faults and truncated real signatures remain signing_failed", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   const publicKey = derivedPublic(keys.privateKey);
