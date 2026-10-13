@@ -782,41 +782,38 @@ function countingHandle(): { handle: unknown; touches: () => number } {
 }
 
 test("signAcceptance: R1 false revision coordinates are refused before the key is used", async () => {
-  const counted = countingHandle();
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
   const result = await signAcceptance(
     { ...world.genesisIssuerClaims, revision_digest: digestOf("different revision bytes") },
-    counted.handle,
+    handle,
     world.genesisView,
   );
-  assert.ok(!result.ok);
-  assert.equal((result as { error: string }).error, "refused");
-  assert.equal(counted.touches(), 0);
+  assert.deepEqual(result, { ok: false, error: "refused", code: "signing_refused" });
+  assert.equal(counts.signs, 0);
 });
 
 test("signAcceptance: R2 equivocation at an occupied revision number is refused", async () => {
-  const counted = countingHandle();
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
   const claims = {
     ...world.genesisIssuerClaims,
     prev_revision_digest: world.genesisDigest,
     revision_digest: world.leftDigest,
     revision_number: 2,
   };
-  const result = await signAcceptance(claims, counted.handle, world.forkView);
-  assert.ok(!result.ok);
-  assert.equal((result as { error: string }).error, "refused");
-  assert.equal(counted.touches(), 0);
+  const result = await signAcceptance(claims, handle, world.forkView);
+  assert.deepEqual(result, { ok: false, error: "refused", code: "signing_refused" });
+  assert.equal(counts.signs, 0);
 });
 
 test("signAcceptance: R3 re-accepting a non-head revision is refused (uncovered head)", async () => {
-  const counted = countingHandle();
-  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, world.forkView);
-  assert.ok(!result.ok);
-  assert.equal((result as { error: string }).error, "refused");
-  assert.equal(counted.touches(), 0);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const result = await signAcceptance(world.genesisIssuerClaims, handle, world.forkView);
+  assert.deepEqual(result, { ok: false, error: "refused", code: "signing_refused" });
+  assert.equal(counts.signs, 0);
 });
 
 test("signTermination: an unlisted reason is refused before the key is used", async () => {
-  const counted = countingHandle();
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
   const result = await signTermination(
     {
       protocol_revision: 2,
@@ -828,16 +825,15 @@ test("signTermination: an unlisted reason is refused before the key is used", as
       issued_at: "2026-08-25T14:00:00Z",
       effective_at: "2026-08-25T15:00:00Z",
     },
-    counted.handle,
+    handle,
     world.advancedView,
   );
-  assert.ok(!result.ok);
-  assert.equal((result as { error: string }).error, "refused");
-  assert.equal(counted.touches(), 0);
+  assert.deepEqual(result, { ok: false, error: "refused", code: "signing_refused" });
+  assert.equal(counts.signs, 0);
 });
 
 test("signTermination: a stale termination (non-governing revision) is refused", async () => {
-  const counted = countingHandle();
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
   const result = await signTermination(
     {
       protocol_revision: 2,
@@ -849,12 +845,11 @@ test("signTermination: a stale termination (non-governing revision) is refused",
       issued_at: "2026-08-25T14:00:00Z",
       effective_at: "2026-08-25T15:00:00Z",
     },
-    counted.handle,
+    handle,
     world.advancedView,
   );
-  assert.ok(!result.ok);
-  assert.equal((result as { error: string }).error, "refused");
-  assert.equal(counted.touches(), 0);
+  assert.deepEqual(result, { ok: false, error: "refused", code: "signing_refused" });
+  assert.equal(counts.signs, 0);
 });
 
 test("a malformed caller view is invalid input, not a refusal", async () => {
@@ -1563,4 +1558,55 @@ test("a throwing claims getter with a wrong-type context returns invalid_type", 
       { ok: false, error: "invalid_input", code: "invalid_type" });
   }
   assert.equal(counts.signs, 0);
+});
+
+
+test("the key snapshot precedes context type errors in prepareSigning", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  let identities = 0;
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity() {
+      identities += 1;
+      return { kid: "", publicKey: derivedPublic(keys.privateKey) };
+    },
+    sign(message) {
+      signs += 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  for (const context of [null, [], 42, "revision text"] as const) {
+    assert.deepEqual(await signAcceptance(world.genesisIssuerClaims, handle, context as never), { ok: false, error: "invalid_key_handle" });
+    assert.deepEqual(await signTermination({}, handle, context as never), { ok: false, error: "invalid_key_handle" });
+    if (typeof context !== "string") {
+      assert.deepEqual(await signReceipt(receiptClaims(), handle, context as never), { ok: false, error: "invalid_key_handle" });
+    }
+  }
+  assert.equal(identities, 11);
+  assert.equal(signs, 0);
+});
+
+test("successful signing reads exactly one key snapshot on every entry point", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const { kind, call } of signingCalls(handle)) {
+    const before = { ...counts };
+    const result = await call({});
+    assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+    assert.equal(counts.identities, before.identities + 1, kind);
+    assert.equal(counts.signs, before.signs + 1, kind);
+  }
+});
+
+test("a wrong key algorithm returns signing_key_mismatch before signing", async () => {
+  const fixture = generatedHandle("ML-DSA-65", "issuer-key-001");
+  for (const { kind, claims } of signingCalls(fixture.handle)) {
+    const mlClaims = { ...claims, protocol_revision: 3 };
+    const opts = { algorithm: "ML-DSA-65" };
+    const result = kind === "descriptor" ? await signDescriptor(mlClaims, fixture.handle, opts) :
+      kind === "receipt" ? await signReceipt(mlClaims, fixture.handle, world.genesisView, opts) :
+      kind === "acceptance" ? await signAcceptance(mlClaims, fixture.handle, world.genesisView, opts) :
+      await signTermination(mlClaims, fixture.handle, world.genesisView, opts);
+    assert.deepEqual(result, { ok: false, error: "refused", code: "signing_key_mismatch" }, kind);
+    assert.equal(fixture.counts.signs, 0, kind);
+  }
 });
