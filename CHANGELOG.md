@@ -5,6 +5,17 @@ documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Real Node crypto tests mint Ed25519 and ML-DSA-65 genesis descriptors.
+  Browser bundle tests use the workshop's crypto shim to mint Ed25519 and
+  refuse ML-DSA-65. The current signer reports that refusal as
+  `signing_failed`; the shim verifier reports
+  `algorithm_unsupported_on_substrate`.
+- Snapshot regression tests keep the existing non-empty decoded-key and
+  string-type checks intact. CI runs the suite on Linux with Node 24.8.0
+  and the current Node 24 line.
+
 ### Breaking
 
 - Rename the handle error from `invalid_handle` to `invalid_key_handle`.

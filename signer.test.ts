@@ -7,7 +7,7 @@
 // Elixir-repo gate separately proves these TS-signed artifacts verify under
 // the Elixir reference implementation.
 import assert from "node:assert/strict";
-import { createHash, createPrivateKey, createPublicKey, sign as nodeSign } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from "node:crypto";
 import { before, test } from "node:test";
 import {
   signAcceptance,
@@ -259,6 +259,56 @@ test("malformed key snapshots return invalid_key_handle on every signing entry p
   assert.deepEqual(await signAcceptance({}, handle, view), expected);
   assert.deepEqual(await signTermination({}, handle, view), expected);
   assert.equal(signs, 0);
+});
+
+test("empty or non-string snapshot public keys remain invalid before signing", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 17));
+  let signs = 0;
+  for (const publicKey of ["", " ", null, undefined, 42, new Uint8Array(32)]) {
+    const handle: KeyHandle = {
+      keyIdentity: () => ({ kid: "snapshot-key", publicKey } as never),
+      sign(message) {
+        signs += 1;
+        return nodeSign(null, message, keys.privateKey);
+      },
+    };
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call(undefined), { ok: false, error: "invalid_key_handle" }, kind);
+    }
+  }
+  assert.equal(signs, 0);
+});
+
+test("Node mints Ed25519 and ML-DSA-65 genesis descriptors with real keys", async () => {
+  for (const algorithm of ["Ed25519", "ML-DSA-65"] as const) {
+    const keys = algorithm === "Ed25519" ? generateKeyPairSync("ed25519") : generateKeyPairSync("ml-dsa-65");
+    const keyBytes = algorithm === "Ed25519" ? 32 : 1952;
+    const publicKey = keys.publicKey.export({ type: "spki", format: "der" }).subarray(-keyBytes).toString("base64url");
+    const protocolRevision = algorithm === "Ed25519" ? 2 : 3;
+    let signs = 0;
+    const handle: KeyHandle = {
+      keyIdentity: () => ({ kid: "genesis-key", publicKey }),
+      sign(message) {
+        signs += 1;
+        return nodeSign(null, message, keys.privateKey);
+      },
+    };
+    const result = await signDescriptor({
+      protocol_revision: protocolRevision,
+      descriptor_number: 1,
+      verification_keys: [{ key_id: "genesis-key", algorithm, public_key: publicKey, status: "active" }],
+      attestation_hints: [],
+      extensions: { critical: {}, optional: {} },
+      effective_from: "2026-08-25T10:00:00Z",
+    }, handle, { algorithm });
+    assert.equal(signs, 1, algorithm);
+    assert.ok(result.ok, `${algorithm}: ${JSON.stringify(result)}`);
+    const verified = verifyDescriptor(result.result.descriptor);
+    assert.ok(verified.ok, `${algorithm}: ${JSON.stringify(verified)}`);
+    assert.equal(verified.facts.descriptor_number, 1);
+    assert.equal(verified.facts.protocol_revision, protocolRevision);
+    assert.equal(verified.facts.alg, algorithm);
+  }
 });
 
 test("signDescriptor: full custody path, post-verified at revision 2", async () => {
