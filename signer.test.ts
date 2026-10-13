@@ -877,7 +877,7 @@ test("a malformed caller view is invalid input, not a refusal", async () => {
   });
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "invalid_input");
-  assert.equal((result as { code?: string }).code, "chain_invalid");
+  assert.equal((result as { code?: string }).code, "compact_invalid");
   assert.equal(counted.touches(), 0);
 });
 

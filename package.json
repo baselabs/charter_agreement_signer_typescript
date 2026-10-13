@@ -35,7 +35,7 @@
     "build:site": "node web/build.mjs && esbuild web/main.ts --bundle --minify --format=iife --target=es2022 --outfile=site-dist/app.js --alias:node:crypto=./web/shim/node-crypto.ts --alias:node:fs=./web/shim/node-fs.ts --alias:node:path=./web/shim/node-path.ts --inject:./web/shim/buffer-global.ts"
   },
   "dependencies": {
-    "@charter-agreement-protocol/verifier": "^0.6.0"
+    "@charter-agreement-protocol/verifier": "file:../ts-verifier-070-snap"
   },
   "devDependencies": {
     "@noble/ed25519": "^3.2.0",
