@@ -20,7 +20,9 @@ import {
   acceptanceSigningInput,
   algorithmRegistry,
   assembleCompact,
+  defaultEmissionName,
   descriptorSigningInput,
+  emissions,
   receiptSigningInput,
   terminationSigningInput,
   verifyAcceptance,
@@ -90,12 +92,16 @@ async function resolveKeyIdentity(
 async function signProduced(
   keyHandle: unknown,
   produce: (kid: string, algorithm?: string) => ProducerResult,
-  opts: { algorithm?: string },
+  opts: { algorithm?: string | null },
 ): Promise<{ input: SigningInput; signature: Buffer } | SignError> {
+  const algorithm = opts?.algorithm ?? defaultEmissionName();
+  if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
+    return { error: "invalid_input", code: "algorithm_unsupported" };
+  }
   const snapshot = await resolveKeyIdentity(keyHandle);
   if ("error" in snapshot) return snapshot;
 
-  const produced = produce(snapshot.kid, opts?.algorithm);
+  const produced = produce(snapshot.kid, algorithm);
   if (!produced.ok) {
     // signing_refused is the honest-signer refusal; every other producer
     // code stays caller input.
@@ -169,7 +175,7 @@ function viewChainOrInvalid(view: { chain: ChainView }): ChainView | { error: "i
 export async function signDescriptor(
   claims: Record<string, unknown>,
   keyHandle: unknown,
-  opts: { algorithm?: string } = {},
+  opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ descriptor: string }>> {
   const signed = await signProduced(keyHandle, (kid, algorithm) => descriptorSigningInput(kid, claims, algorithm), opts);
   if ("error" in signed) return { ok: false, ...signed };
@@ -184,7 +190,7 @@ export async function signReceipt(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   chain: ChainView,
-  opts: { algorithm?: string } = {},
+  opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ receipt: string }>> {
   // The issuing view is REQUIRED (the reference takes ChainFacts or a
   // CharterRevision, never none) and its discipline runs after the build,
@@ -211,7 +217,7 @@ export async function signAcceptance(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
-  opts: { algorithm?: string } = {},
+  opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ acceptance: string }>> {
   const viewChain = viewChainOrInvalid(view);
   const signed = await signProduced(keyHandle, (kid, algorithm) => {
@@ -230,7 +236,7 @@ export async function signTermination(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
-  opts: { algorithm?: string } = {},
+  opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ termination: string }>> {
   const viewChain = viewChainOrInvalid(view);
   const signed = await signProduced(keyHandle, (kid, algorithm) => {

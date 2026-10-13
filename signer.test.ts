@@ -59,6 +59,97 @@ function digestOf(text: string): string {
   return "sha-256:" + createHash("sha256").update(text).digest("base64url");
 }
 
+function receiptClaims(): Record<string, unknown> {
+  return {
+    protocol_revision: 2,
+    charter_id: world.genesisDigest,
+    revision_number: 1,
+    revision_digest: world.genesisDigest,
+    issuing_party_role: "issuer",
+    agent_party_role: "acceptor",
+    deployment_digest: world.deploymentDigest,
+    grant: { scheme: "bap", id: "grant-001", grant_digest: digestOf("example receipt reference bytes") },
+    invocation_id: "inv-001",
+    decision: "accepted",
+    outcome: "effect_committed",
+    occurred_at: "2026-08-25T13:30:00Z",
+    recorded_at: "2026-08-25T13:30:01Z",
+    extensions: { critical: {}, optional: {} },
+  };
+}
+
+function signingCalls(handle: unknown) {
+  const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView };
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const descriptorClaims = {
+    protocol_revision: 2,
+    descriptor_number: 1,
+    verification_keys: [{ key_id: "issuer-key-001", algorithm: "Ed25519", public_key: publicKey, status: "active" }],
+    attestation_hints: [],
+    extensions: { critical: {}, optional: {} },
+    effective_from: "2026-08-25T10:00:00Z",
+  };
+  const terminationClaims = {
+    protocol_revision: 2,
+    charter_id: world.genesisDigest,
+    governing_revision_digest: world.genesisDigest,
+    party_descriptor_digest: world.issuer.pdd,
+    party_role: "issuer",
+    reason_code: "mutual",
+    issued_at: "2026-08-25T14:00:00Z",
+    effective_at: "2026-08-25T15:00:00Z",
+  };
+  type Options = Parameters<typeof signDescriptor>[2];
+  return [
+    { kind: "descriptor", call: (opts: Options) => signDescriptor(descriptorClaims, handle, opts) },
+    { kind: "receipt", call: (opts: Options) => signReceipt(receiptClaims(), handle, world.genesisView, opts) },
+    { kind: "acceptance", call: (opts: Options) => signAcceptance(world.genesisIssuerClaims, handle, view, opts) },
+    { kind: "termination", call: (opts: Options) => signTermination(terminationClaims, handle, view, opts) },
+  ];
+}
+
+test("unsupported algorithm values return algorithm_unsupported before either key callback", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  let identities = 0;
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity() {
+      identities += 1;
+      return { kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) };
+    },
+    sign(message) {
+      signs += 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  const invalidValues = ["", "EdDSA", "ML-DSA-44", "ML-DSA-87", "unknown", 0, 42, false, true, [], {}, Symbol("algorithm")];
+  for (const algorithm of invalidValues) {
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call({ algorithm } as never),
+        { ok: false, error: "invalid_input", code: "algorithm_unsupported" }, kind);
+      assert.equal(identities, 0, kind);
+      assert.equal(signs, 0, kind);
+    }
+  }
+  for (const { kind, call } of signingCalls(null)) {
+    assert.deepEqual(await call({ algorithm: "unknown" }),
+      { ok: false, error: "invalid_input", code: "algorithm_unsupported" }, kind);
+  }
+});
+
+test("absent, undefined and null algorithms select Ed25519 on every signing entry point", async () => {
+  const { handle } = rawKeyHandle(Buffer.alloc(32, 11), "issuer-key-001");
+  for (const opts of [undefined, {}, { algorithm: undefined }, { algorithm: null }, { algorithm: "Ed25519" }]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      const result = await call(opts as never);
+      assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+      const compact = Object.values(result.result)[0];
+      const header = JSON.parse(Buffer.from(compact.split(".")[0], "base64url").toString("utf8"));
+      assert.equal(header.alg, "Ed25519", kind);
+    }
+  }
+});
+
 test("malformed key snapshots return invalid_key_handle on every signing entry point", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 17));
   let signs = 0;

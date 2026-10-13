@@ -13,6 +13,11 @@ documented here.
 
 ### Changed
 
+- Resolve the algorithm before calling `keyIdentity`. Absent, `undefined`
+  and `null` select Ed25519; supported explicit values are `Ed25519` and
+  `ML-DSA-65`. Other values, including non-strings, return `invalid_input`
+  with `code: "algorithm_unsupported"` without using the handle.
+
 - Use `@charter-agreement-protocol/verifier` `^0.6.0` (locked to 0.6.0).
   Fixtures hash real bytes, use canonical revision JSON, and count real
   Ed25519 signing calls.

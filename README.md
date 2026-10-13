@@ -72,6 +72,11 @@ For ML-DSA-65 artifacts pass `{ algorithm: "ML-DSA-65" }` as the options
 argument with `protocol_revision: 3` claims (pure ML-DSA per RFC 9964, the
 empty context — your handle signs the exact message bytes as with Ed25519).
 
+An absent, `undefined` or `null` algorithm selects Ed25519. Explicit
+algorithms are `Ed25519` and `ML-DSA-65`; any other value returns
+`invalid_input` with `code: "algorithm_unsupported"` before either key
+callback runs.
+
 ## API
 
 | Export | What it does |
