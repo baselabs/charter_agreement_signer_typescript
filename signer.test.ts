@@ -1178,3 +1178,16 @@ test("key encoding checks follow context type and claims checks", async () => {
   assert.deepEqual(await signReceipt({}, handle, null as never), { ok: false, error: "invalid_input", code: "invalid_type" });
   assert.equal(signs, 0);
 });
+
+test("invalid limits precede a throwing profile getter", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const opts = {
+    limits: { max_bytes: -1 },
+    get profile(): never { throw new Error("profile unreadable"); },
+  };
+  for (const { kind, call } of signingCalls(handle)) {
+    assert.deepEqual(await call(opts), { ok: false, error: "invalid_input", code: "invalid_limits" }, kind);
+    assert.equal(counts.identities, 0, kind);
+    assert.equal(counts.signs, 0, kind);
+  }
+});

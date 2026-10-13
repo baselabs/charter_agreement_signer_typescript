@@ -108,29 +108,53 @@ async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignEr
 // throwing getter is caller input error, never a thrown exception.
 const OPTION_KEYS = new Set(["algorithm", "limits", "profile"]);
 
-function signingOptions(opts: unknown, descriptor: boolean): DescriptorOptions | SignError {
+type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
+
+function readOption(opts: Record<string, unknown>, key: string): { value: unknown } | SignError {
   try {
-    if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return { error: "invalid_input", code: "invalid_type" };
-    const prototype = Object.getPrototypeOf(opts);
-    if (prototype !== Object.prototype && prototype !== null ||
-        !Reflect.ownKeys(opts).every((key) => typeof key === "string" && (OPTION_KEYS.has(key) || descriptor && key === "predecessor"))) {
-      return { error: "invalid_input", code: "invalid_type" };
-    }
-    const supplied = opts as DescriptorOptions;
-    const settings = copyClaims({ limits: supplied.limits, profile: supplied.profile }) as SigningOptions;
-    // The verifier resolves limits, then profile, before decoding any text.
-    const checked = decodeCharterRevision(undefined, settings);
-    if (!checked.ok && (checked.code === "invalid_limits" || checked.code === "invalid_profile")) {
-      return { error: "invalid_input", code: checked.code };
-    }
-    const algorithm = supplied.algorithm ?? defaultEmissionName();
-    if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
-      return { error: "invalid_input", code: "algorithm_unsupported" };
-    }
-    return { ...settings, algorithm, ...(descriptor ? { predecessor: copyClaims(supplied.predecessor as Record<string, unknown>) as DescriptorPredecessor | undefined } : {}) };
+    return { value: copyClaims(opts[key] as Record<string, unknown>) };
   } catch (_getter) {
     return { error: "invalid_input", code: "invalid_type" };
   }
+}
+
+function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | SignError {
+  try {
+    if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return { error: "invalid_input", code: "invalid_type" };
+    const prototype = Object.getPrototypeOf(opts);
+    if ((prototype !== Object.prototype && prototype !== null) ||
+        !Reflect.ownKeys(opts).every((key) => typeof key === "string" && (OPTION_KEYS.has(key) || descriptor && key === "predecessor"))) {
+      return { error: "invalid_input", code: "invalid_type" };
+    }
+  } catch (_shape) {
+    return { error: "invalid_input", code: "invalid_type" };
+  }
+  const supplied = opts as Record<string, unknown>;
+  const limits = readOption(supplied, "limits");
+  if ("error" in limits) return limits;
+  // The verifier resolves settings before decoding any text.
+  const settings: SigningOptions = { limits: limits.value as Partial<Limits> | undefined };
+  const checkedLimits = decodeCharterRevision(undefined, settings);
+  if (!checkedLimits.ok && checkedLimits.code === "invalid_limits") {
+    return { error: "invalid_input", code: checkedLimits.code };
+  }
+  const profile = readOption(supplied, "profile");
+  if ("error" in profile) return profile;
+  settings.profile = profile.value as Profile | undefined;
+  const checkedProfile = decodeCharterRevision(undefined, settings);
+  if (!checkedProfile.ok && checkedProfile.code === "invalid_profile") {
+    return { error: "invalid_input", code: checkedProfile.code };
+  }
+  const selected = readOption(supplied, "algorithm");
+  if ("error" in selected) return selected;
+  const algorithm = selected.value ?? defaultEmissionName();
+  if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
+    return { error: "invalid_input", code: "algorithm_unsupported" };
+  }
+  if (!descriptor) return { ...settings, algorithm };
+  const predecessor = readOption(supplied, "predecessor");
+  if ("error" in predecessor) return predecessor;
+  return { ...settings, algorithm, predecessor: predecessor.value as DescriptorPredecessor | undefined };
 }
 
 function prepareError(code: string): SignError {
@@ -163,7 +187,7 @@ async function signPrepared(
   if ("error" in snapshot) return snapshot;
 
   const prepared = prepareSigning(kind, snapshot.kid, claims, snapshot.publicKey, retained, {
-    algorithm: options.algorithm as string,
+    algorithm: options.algorithm,
     limits: options.limits,
     profile: options.profile,
   });
