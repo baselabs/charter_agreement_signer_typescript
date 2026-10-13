@@ -1361,7 +1361,7 @@ test("signature faults and truncated real signatures remain signing_failed", asy
   }
 });
 
-test("completion errors map to the bare verification_failed result", async () => {
+test("the wrong-key guard rejects bytes changed in place by the signing callback", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   const publicKey = derivedPublic(keys.privateKey);
   let signs = 0;
@@ -1369,15 +1369,14 @@ test("completion errors map to the bare verification_failed result", async () =>
     keyIdentity: () => ({ kid: "issuer-key-001", publicKey }),
     sign(message) {
       signs += 1;
-      // The callback signs altered bytes; the retained plan still has the
-      // prepared message and rejects this real signature on completion.
+      // A real signature over changed bytes must fail the custody guard.
       message[0] ^= 1;
       return nodeSign(null, message, keys.privateKey);
     },
   };
   for (const { kind, call } of signingCalls(handle)) {
     const before = signs;
-    assert.deepEqual(await call({}), { ok: false, error: "verification_failed" }, kind);
+    assert.deepEqual(await call({}), { ok: false, error: "signing_failed" }, kind);
     assert.equal(signs, before + 1, kind);
   }
 });

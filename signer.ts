@@ -205,7 +205,7 @@ async function signPrepared(
 
   let signature: Uint8Array;
   try {
-    signature = await (keyHandle as KeyHandle).sign(input.message, keyHandle);
+    signature = await (keyHandle as KeyHandle).sign(Buffer.from(input.message), keyHandle);
   } catch (_fault) {
     return { error: "signing_failed" };
   }
@@ -213,13 +213,15 @@ async function signPrepared(
   if (!(signature instanceof Uint8Array) || !row || signature.length !== row.signatureBytes) {
     return { error: "signing_failed" };
   }
-  if (!verifySignature(input.message, Buffer.from(signature), snapshot.publicKey, input.alg, {
+  if (!verifySignature(prepared.plan.input.message, Buffer.from(signature), snapshot.publicKey, input.alg, {
     limits: options.limits,
     profile: options.profile,
   })) {
     return { error: "signing_failed" };
   }
   const finished = finishSigning(prepared.plan, signature);
+  // No real-crypto path reaches this mapping after preparation and the
+  // custody guard succeed; keep it for a verifier completion error.
   if (!finished.ok) return { error: "verification_failed" };
   return { compact: finished.compact };
 }
