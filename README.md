@@ -129,9 +129,11 @@ unknown key, a `Map`, a class instance, or a throwing getter returns
 `invalid_input` with `code: "invalid_type"`.
 
 `limits` is the verifier's `Partial<Limits>` and `profile` is its `Profile`.
-Malformed values return `invalid_input` with `invalid_limits` or
+Malformed JSON values return `invalid_input` with `invalid_limits` or
 `invalid_profile`, in that order, before the algorithm or key snapshot is
-resolved. Limits bound the final compact, including signature bytes, and
+resolved. Sparse profile algorithm lists are non-JSON values and return
+`invalid_input`/`invalid_type` during the entry copy, before either callback.
+Limits bound the final compact, including signature bytes, and
 every context artifact read; raised limits also apply to assembly and the
 custody guard. Profiles can restrict `algorithms` and/or
 `revisions: { min, max }`; an omitted axis keeps the full supported range.
@@ -158,6 +160,11 @@ Errors are closed:
 | `verification_failed` | `finishSigning` rejected what preparation approved |
 
 Every failure has `ok: false`. Only `invalid_input` and `refused` carry `code`.
+The signing callback can return a Buffer or any `Uint8Array`, including one
+from another JavaScript realm. The verifier rejects Ed25519 public keys with
+noncanonical y coordinates, no curve point, x = 0 with the sign bit set, or
+small order as `invalid_key_handle` when they are snapshot keys. Descriptor
+claims containing such keys can fail earlier with `signing_input_invalid`.
 All pre-sign rejections leave the `sign` callback untouched; the atomic key
 snapshot precedes `prepareSigning`. A malformed context type returns
 `invalid_input`/`invalid_type`. For otherwise valid descriptor claims, predecessor

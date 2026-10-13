@@ -71,6 +71,12 @@ documented here.
 - Use the frozen verifier 0.7.0 build at `a06673c`. Its preparation corpus uses
   the public input shapes, and signing plans can only be made through
   `prepareSigning`. The signer already uses that path.
+- Accept signature bytes from any JavaScript realm, including Buffer and plain
+  `Uint8Array`. Ed25519 snapshot keys with noncanonical y coordinates, no curve
+  point, x = 0 with the sign bit set, or small order return `invalid_key_handle`.
+  Invalid descriptor claim keys can fail earlier with `signing_input_invalid`.
+  Sparse profile algorithm lists reject during the signer's JSON entry copy
+  with `invalid_input`/`invalid_type`, before either key callback.
 - Structurally copy claims, context, limits, profile, and predecessor before
   the first `await`, including Proxy-backed plain objects and repeated objects.
   Copies contain fresh plain JSON values. Class instances, other non-JSON

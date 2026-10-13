@@ -101,6 +101,7 @@ async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignEr
 // fall back to the default silently, and a Map, a class instance or a
 // throwing getter is caller input error, never a thrown exception.
 const OPTION_KEYS = new Set(["algorithm", "limits", "profile"]);
+const byteArrayTag = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag)!.get!;
 
 type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
 
@@ -201,7 +202,7 @@ async function signPrepared(
   } catch (_fault) {
     return { error: "signing_failed" };
   }
-  if (!(signature instanceof Uint8Array)) {
+  if (!ArrayBuffer.isView(signature) || byteArrayTag.call(signature) !== "Uint8Array") {
     return { error: "signing_failed" };
   }
   // The verifier's signature guard owns signature length checks.

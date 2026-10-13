@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from "node:crypto";
 import { before, test } from "node:test";
+import { runInNewContext } from "node:vm";
 import {
   signAcceptance,
   signDescriptor,
@@ -1639,5 +1640,42 @@ test("the signature guard rejects short and long real signatures for both algori
         { ok: false, error: "signing_failed" }, `${algorithm}/${length}`);
       assert.equal(signs, 1);
     }
+  }
+});
+
+test("real signature bytes work as Buffer, plain and cross-realm Uint8Array", async () => {
+  for (const algorithm of ["Ed25519", "ML-DSA-65"] as const) {
+    const keys = algorithm === "Ed25519" ? generateKeyPairSync("ed25519") : generateKeyPairSync("ml-dsa-65");
+    const publicKey = keys.publicKey.export({ type: "spki", format: "der" }).subarray(algorithm === "Ed25519" ? -32 : -1952).toString("base64url");
+    for (const format of ["buffer", "plain", "cross-realm"] as const) {
+      const counts = { identities: 0, signs: 0 };
+      const handle: KeyHandle = {
+        keyIdentity() { counts.identities += 1; return { kid: "bytes-key", publicKey }; },
+        sign(message) {
+          counts.signs += 1;
+          const bytes = nodeSign(null, message, keys.privateKey);
+          if (format === "buffer") return bytes;
+          if (format === "plain") return new Uint8Array(bytes);
+          const foreign = runInNewContext("new Uint8Array(bytes)", { bytes: Array.from(bytes) }) as Uint8Array;
+          assert.equal(foreign instanceof Uint8Array, false);
+          return foreign;
+        },
+      };
+      const result = await signDescriptor(genesisClaims(algorithm, "bytes-key", publicKey), handle, { algorithm });
+      assert.ok(result.ok, `${algorithm}/${format}: ${JSON.stringify(result)}`);
+      assert.ok(verifyDescriptor(result.result.descriptor).ok);
+      assert.deepEqual(counts, { identities: 1, signs: 1 });
+    }
+  }
+});
+
+test("sparse profile algorithm lists reject before either key callback", async () => {
+  const algorithms = Array<string>(2);
+  algorithms[0] = "Ed25519";
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const { kind, call } of signingCalls(handle)) {
+    assert.deepEqual(await call({ profile: { algorithms } }),
+      { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
+    assert.deepEqual(counts, { identities: 0, signs: 0 });
   }
 });
