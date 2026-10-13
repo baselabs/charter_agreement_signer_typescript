@@ -1105,7 +1105,7 @@ function genesisClaims(algorithm: "Ed25519" | "ML-DSA-65", kid: string, publicKe
   };
 }
 
-test("profiles exclude context revisions and descriptor algorithms before signing", async () => {
+test("profiles excluding the signing party history or revision reject before signing", async () => {
   for (const profile of [{ algorithms: ["ML-DSA-65"] }, { revisions: { min: 3, max: 3 } }]) {
     const fixture = generatedHandle("ML-DSA-65", "issuer-key-001");
     const opts = { algorithm: "ML-DSA-65", profile };
@@ -1397,4 +1397,55 @@ test("Ed25519 compacts retain byte identity with the build-only producer surface
     assert.ok(result.ok, JSON.stringify(result));
     assert.equal(Object.values(result.result)[0], expected.compact, kind);
   }
+});
+
+
+test("mixed sets use the signing party profile for acceptance and termination", async () => {
+  const ml = generatedHandle("ML-DSA-65", "acceptor-key-ml");
+  const descriptor = await signDescriptor(genesisClaims("ML-DSA-65", "acceptor-key-ml", ml.publicKey), ml.handle, { algorithm: "ML-DSA-65" });
+  assert.ok(descriptor.ok, JSON.stringify(descriptor));
+  const verified = verifyDescriptor(descriptor.result.descriptor);
+  assert.ok(verified.ok);
+  const revisionClaims = JSON.parse(world.genesisText);
+  revisionClaims.parties[1].party_descriptor_digest = verified.facts.descriptor_digest;
+  const revisionText = canonical(revisionClaims);
+  const digested = revisionDigest(revisionText);
+  assert.ok(digested.ok);
+  const chain: ChainView = {
+    revisions: [revisionText], acceptances: [],
+    descriptors: [world.issuer.descriptor, descriptor.result.descriptor], terminations: [],
+  };
+  const issuerClaims = { ...world.genesisIssuerClaims, charter_id: digested.digest, revision_digest: digested.digest };
+  const issuer = callbackCounts(11, "issuer-key-001");
+  const initial = await signAcceptance(issuerClaims, issuer.handle, chain);
+  assert.ok(initial.ok, JSON.stringify(initial));
+  chain.acceptances.push(initial.result.acceptance);
+  const counterparty = await signAcceptance({
+    ...issuerClaims, protocol_revision: 3, party_role: "acceptor", party_descriptor_digest: verified.facts.descriptor_digest,
+  }, ml.handle, chain, { algorithm: "ML-DSA-65" });
+  assert.ok(counterparty.ok, JSON.stringify(counterparty));
+  chain.acceptances.push(counterparty.result.acceptance);
+  assert.ok(verifyChain(chain).ok);
+  const profile = { algorithms: ["Ed25519"] };
+  assert.deepEqual(verifyChain(chain, { profile }), { ok: false, code: "algorithm_outside_profile" });
+  const terminationClaims = {
+    protocol_revision: 2, charter_id: digested.digest, governing_revision_digest: digested.digest,
+    party_descriptor_digest: world.issuer.pdd, party_role: "issuer", reason_code: "mutual",
+    issued_at: "2026-08-25T14:00:00Z", effective_at: "2026-08-25T15:00:00Z",
+  };
+  for (const kind of ["acceptance", "termination"] as const) {
+    const before = issuer.counts.signs;
+    const result = kind === "acceptance" ? await signAcceptance(issuerClaims, issuer.handle, chain, { profile }) :
+      await signTermination(terminationClaims, issuer.handle, chain, { profile });
+    assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+    assert.equal(issuer.counts.signs, before + 1, kind);
+    const compact = Object.values(result.result)[0];
+    const checked = kind === "acceptance" ? verifyAcceptance(compact, revisionText, [world.issuer.descriptor], { profile }) :
+      verifyTermination(compact, revisionText, [world.issuer.descriptor], { profile });
+    assert.ok(checked.ok, `${kind}: ${JSON.stringify(checked)}`);
+  }
+  const before = issuer.counts.signs;
+  assert.deepEqual(await signReceipt({ ...receiptClaims(), charter_id: digested.digest, revision_digest: digested.digest }, issuer.handle, chain, { profile }),
+    { ok: false, error: "invalid_input", code: "algorithm_outside_profile" });
+  assert.equal(issuer.counts.signs, before);
 });

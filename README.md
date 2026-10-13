@@ -135,12 +135,11 @@ An EdDSA-only profile, an ML-DSA-44/87-only profile, or revisions 1..1 excludes
 every artifact this signer emits. Exclusions return `algorithm_outside_profile`
 or `revision_outside_profile`, whether they concern the new artifact or context.
 
-In the frozen snapshot, acceptance and termination apply the caller's profile
-to the claimed revision, the holder's descriptor history, and the new artifact;
-the other entries in the set are checked under the default profile. Receipt
-profiles cover the full chain, and descriptor profiles cover predecessor
-history. The snapshot's acceptance/termination scope differs from the required
-full-set profile check.
+For acceptance and termination, the caller's profile covers the claimed
+revision, the signing party's own descriptor history, and the new artifact.
+The rest of the set is checked under the full default profile. A receipt's
+profile covers the whole retained set; a descriptor's covers its predecessor
+history.
 
 Errors are closed:
 
@@ -165,7 +164,7 @@ snapshot precedes `prepareSigning`. A malformed context type returns
 The signer and verifier are separate TypeScript packages implementing the
 Charter Agreement Protocol, with no Elixir dependency at runtime. The
 verifier ships a corpus certified against the Elixir protocol reference.
-This signer tests its artifacts through the TypeScript verifier snapshot.
+This signer tests its artifacts through the TypeScript verifier.
 All protocol checks run in `prepareSigning` and `finishSigning`; the signer
 keeps key custody callbacks, the signature guard, entry copies, option
 resolution, and the closed error vocabulary.

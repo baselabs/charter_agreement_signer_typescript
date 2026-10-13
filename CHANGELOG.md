@@ -59,8 +59,7 @@ documented here.
 ### Changed
 
 - Delegate preparation and completion to verifier 0.7.0's `prepareSigning`
-  and `finishSigning`. Use the frozen local dependency
-  `file:../ts-verifier-070-snap`; remove the signer's context derivation,
+  and `finishSigning`; remove the signer's context derivation,
   producer calls, assembly calls, and choice of post-sign verification function.
 - Preserve entry copies of claims and chain arrays and copy limits, profile,
   and predecessor lineage before the first `await`, including Proxy-backed
@@ -75,10 +74,11 @@ documented here.
 - SECURITY.md uses GitHub private vulnerability reporting. Evidence descriptions
   name the checks that run; this signer has no telemetry or shared cross-runtime
   comparison suite.
-- In the frozen snapshot, acceptance and termination apply the caller's profile
-  to the routed context and use the default profile for other set entries. This
-  differs from the required full-set profile check. Receipt profiles cover the
-  full chain and descriptor profiles cover predecessor history.
+- For acceptance and termination, the caller's profile covers the claimed
+  revision, the signing party's own descriptor history, and the new artifact.
+  The rest of the set is checked under the full default profile. A receipt's
+  profile covers the whole retained set; a descriptor's covers its predecessor
+  history.
 
 ### Migration from CAP 0.4 to 0.5
 
