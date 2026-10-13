@@ -39,6 +39,7 @@ documented here.
   `limits`, `profile`, and (for `signDescriptor`) `predecessor`. Unknown keys,
   non-plain objects, and unreadable getters return `invalid_input`/`invalid_type`.
   Malformed limits and profiles preserve `invalid_limits` and `invalid_profile`.
+  Previously, a misspelled option key silently fell back to Ed25519.
 
 ### Added
 

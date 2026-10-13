@@ -5,7 +5,6 @@
 // the wrong-key guard.
 
 import {
-  algorithmRegistry,
   defaultEmissionName,
   decodeCharterRevision,
   emissions,
@@ -202,10 +201,10 @@ async function signPrepared(
   } catch (_fault) {
     return { error: "signing_failed" };
   }
-  const row = algorithmRegistry().find((one) => one.name === input.alg);
-  if (!(signature instanceof Uint8Array) || !row || signature.length !== row.signatureBytes) {
+  if (!(signature instanceof Uint8Array)) {
     return { error: "signing_failed" };
   }
+  // The verifier's signature guard owns signature length checks.
   if (!verifySignature(prepared.plan.input.message, Buffer.from(signature), snapshot.publicKey, input.alg, {
     limits: options.limits,
     profile: options.profile,

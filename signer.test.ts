@@ -1610,3 +1610,27 @@ test("a wrong key algorithm returns signing_key_mismatch before signing", async 
     assert.equal(fixture.counts.signs, 0, kind);
   }
 });
+
+
+test("the signature guard rejects short and long real signatures for both algorithms", async () => {
+  for (const algorithm of ["Ed25519", "ML-DSA-65"] as const) {
+    const keys = algorithm === "Ed25519" ? generateKeyPairSync("ed25519") : generateKeyPairSync("ml-dsa-65");
+    const publicKey = keys.publicKey.export({ type: "spki", format: "der" }).subarray(algorithm === "Ed25519" ? -32 : -1952).toString("base64url");
+    for (const length of ["short", "long"] as const) {
+      let signs = 0;
+      const handle: KeyHandle = {
+        keyIdentity: () => ({ kid: "length-key", publicKey }),
+        sign(message) {
+          signs += 1;
+          const signature = nodeSign(null, message, keys.privateKey);
+          const resized = length === "short" ? signature.subarray(0, signature.length - 1) : Buffer.concat([signature, Buffer.from([0])]);
+          assert.equal(verifySignature(Buffer.from(message), resized, publicKey, algorithm), false, `${algorithm}/${length}`);
+          return resized;
+        },
+      };
+      assert.deepEqual(await signDescriptor(genesisClaims(algorithm, "length-key", publicKey), handle, { algorithm }),
+        { ok: false, error: "signing_failed" }, `${algorithm}/${length}`);
+      assert.equal(signs, 1);
+    }
+  }
+});
