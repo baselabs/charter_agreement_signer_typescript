@@ -22,8 +22,14 @@ documented here.
 - The holder's own descriptor key is checked before signing. A wrong kid,
   public key, or key algorithm returns
   `{ ok: false, error: "refused", code: "signing_key_mismatch" }`.
-  `signing_key_invalid` maps to `invalid_key_handle`. Missing or invalid
-  successor predecessors return `invalid_input`/`descriptor_chain_invalid`.
+  `signing_key_invalid` maps to `invalid_key_handle`. For otherwise valid
+  descriptor claims, an absent or null successor predecessor, a valid predecessor
+  supplied to a genesis, broken signed lineage, or digest aliases that disagree
+  with the reverified lineage return `invalid_input`/`descriptor_chain_invalid`.
+  A non-object predecessor, both digest aliases absent, or missing, null, empty,
+  or non-string lineage return `invalid_input`/`invalid_type`. Throwing reads also
+  return `invalid_type`. History excluded by a profile or requiring unavailable
+  crypto preserves the profile or substrate code.
 - Context, claims/context mismatches, profile exclusions, and compact size
   limits reject before the signing callback. Missing or malformed context
   types return `invalid_input`/`invalid_type`; malformed sets preserve the
@@ -62,6 +68,9 @@ documented here.
 - Delegate preparation and completion to verifier 0.7.0's `prepareSigning`
   and `finishSigning`; remove the signer's context derivation,
   producer calls, assembly calls, and choice of post-sign verification function.
+- Use the frozen verifier 0.7.0 build at `a06673c`. Its preparation corpus uses
+  the public input shapes, and signing plans can only be made through
+  `prepareSigning`. The signer already uses that path.
 - Structurally copy claims, context, limits, profile, and predecessor before
   the first `await`, including Proxy-backed plain objects and repeated objects.
   Copies contain fresh plain JSON values. Class instances, other non-JSON

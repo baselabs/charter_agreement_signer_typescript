@@ -21,7 +21,8 @@ npm install @charter-agreement-protocol/signer
 ```
 
 Version **0.3.0** requires Node >= 24.8.0 and the verifier 0.7.0 pre-sign API.
-This checkout uses the frozen verifier snapshot at `file:../ts-verifier-070-snap`.
+This checkout uses the frozen verifier build at `file:../ts-verifier-070-a066`
+(commit `a06673c`).
 
 ## Quickstart
 
@@ -159,8 +160,18 @@ Errors are closed:
 Every failure has `ok: false`. Only `invalid_input` and `refused` carry `code`.
 All pre-sign rejections leave the `sign` callback untouched; the atomic key
 snapshot precedes `prepareSigning`. A malformed context type returns
-`invalid_input`/`invalid_type`. A successor without a valid predecessor returns
-`invalid_input`/`descriptor_chain_invalid` before signing.
+`invalid_input`/`invalid_type`. For otherwise valid descriptor claims, predecessor
+errors return `invalid_input` with these codes before signing:
+
+- `invalid_type`: a non-object predecessor, a missing digest alias (both `digest`
+  and `descriptor_digest` absent), or missing, null, empty, or non-string `lineage`.
+  Throwing reads also return this code.
+- `descriptor_chain_invalid`: an absent or null predecessor for a successor,
+  a valid predecessor supplied to a genesis, a broken signed lineage, or digest
+  aliases that disagree with the reverified lineage.
+- `algorithm_outside_profile`, `revision_outside_profile`, or
+  `algorithm_unsupported_on_substrate`: predecessor history excluded by the
+  profile or requiring unavailable crypto.
 
 ## The sibling verifier
 

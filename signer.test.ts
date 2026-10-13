@@ -1160,9 +1160,16 @@ test("successor descriptors use the retained predecessor for both algorithms", a
       effective_from: "2026-08-25T11:00:00Z",
     };
     const before = previousKey.counts.signs;
-    for (const predecessor of [undefined, { ...verified.facts, descriptor_digest: digestOf("other descriptor") }, { lineage: [42] }]) {
+    for (const [predecessor, code] of [
+      [undefined, "descriptor_chain_invalid"],
+      [{ ...verified.facts, descriptor_digest: digestOf("other descriptor") }, "descriptor_chain_invalid"],
+      [{ lineage: [42] }, "invalid_type"],
+      ...[undefined, null, [], [42]].map((lineage) => [{ ...verified.facts, lineage }, "invalid_type"]),
+      [{ lineage: verified.facts.lineage }, "invalid_type"],
+      [{ ...verified.facts, lineage: ["bad compact"] }, "descriptor_chain_invalid"],
+    ] as const) {
       assert.deepEqual(await signDescriptor(successor, previousKey.handle, { algorithm, predecessor } as never),
-        { ok: false, error: "invalid_input", code: "descriptor_chain_invalid" });
+        { ok: false, error: "invalid_input", code });
       assert.equal(previousKey.counts.signs, before);
     }
     assert.deepEqual(await signDescriptor(successor, nextKey.handle, { algorithm, predecessor: verified.facts }),
@@ -1219,10 +1226,10 @@ test("malformed contexts return verifier codes without signing", async () => {
       assert.equal(counts.signs, 0);
     }
   }
-  for (const predecessor of [42, [], { lineage: null }, { lineage: [42] }]) {
+  for (const predecessor of [42, [], {}, { lineage: null }, { lineage: [] }, { lineage: [42] }]) {
     const snapshot = await handle.keyIdentity(handle);
     const result = await signDescriptor(genesisClaims("Ed25519", snapshot.kid, snapshot.publicKey), handle, { predecessor } as never);
-    assert.deepEqual(result, { ok: false, error: "invalid_input", code: typeof predecessor === "number" || Array.isArray(predecessor) ? "invalid_type" : "descriptor_chain_invalid" });
+    assert.deepEqual(result, { ok: false, error: "invalid_input", code: "invalid_type" });
     assert.equal(counts.signs, 0);
   }
 });
