@@ -15,6 +15,11 @@ import {
 } from "./signer.ts";
 import {
   canonical,
+  descriptorSigningInput,
+  acceptanceSigningInput,
+  terminationSigningInput,
+  receiptSigningInput,
+  assembleCompact,
   revisionDigest,
   verifyAcceptance,
   verifyChain,
@@ -96,10 +101,10 @@ function signingCalls(handle: unknown) {
   };
   type Options = Parameters<typeof signDescriptor>[2];
   return [
-    { kind: "descriptor", call: (opts: Options) => signDescriptor(descriptorClaims, handle, opts) },
-    { kind: "receipt", call: (opts: Options) => signReceipt(receiptClaims(), handle, world.genesisView, opts) },
-    { kind: "acceptance", call: (opts: Options) => signAcceptance(world.genesisIssuerClaims, handle, view, opts) },
-    { kind: "termination", call: (opts: Options) => signTermination(terminationClaims, handle, view, opts) },
+    { kind: "descriptor", claims: descriptorClaims, call: (opts: Options) => signDescriptor(descriptorClaims, handle, opts) },
+    { kind: "receipt", claims: receiptClaims(), call: (opts: Options) => signReceipt(receiptClaims(), handle, world.genesisView, opts) },
+    { kind: "acceptance", claims: world.genesisIssuerClaims, call: (opts: Options) => signAcceptance(world.genesisIssuerClaims, handle, view, opts) },
+    { kind: "termination", claims: terminationClaims, call: (opts: Options) => signTermination(terminationClaims, handle, view, opts) },
   ];
 }
 
@@ -207,7 +212,7 @@ test("unsupported algorithm values return algorithm_unsupported before either ke
       return nodeSign(null, message, keys.privateKey);
     },
   };
-  const invalidValues = ["", "EdDSA", "ML-DSA-44", "ML-DSA-87", "unknown", 0, 42, false, true, [], {}, Symbol("algorithm")];
+  const invalidValues = ["", "EdDSA", "ML-DSA-44", "ML-DSA-87", "unknown", "constructor", "__proto__", 0, 42, false, true, [], {}, Symbol("algorithm")];
   for (const algorithm of invalidValues) {
     for (const { kind, call } of signingCalls(handle)) {
       assert.deepEqual(await call({ algorithm } as never),
@@ -1107,6 +1112,12 @@ test("profiles exclude context revisions and descriptor algorithms before signin
     const expected = { ok: false, error: "invalid_input", code: "algorithms" in profile ? "algorithm_outside_profile" : "revision_outside_profile" };
     assert.deepEqual(await signAcceptance({ ...world.genesisIssuerClaims, protocol_revision: 3 }, fixture.handle, world.genesisView, opts), expected);
     assert.equal(fixture.counts.signs, 0);
+    assert.deepEqual(await signTermination({
+      protocol_revision: 3, charter_id: world.genesisDigest, governing_revision_digest: world.genesisDigest,
+      party_descriptor_digest: world.issuer.pdd, party_role: "issuer", reason_code: "mutual",
+      issued_at: "2026-08-25T14:00:00Z", effective_at: "2026-08-25T15:00:00Z",
+    }, fixture.handle, world.genesisView, opts), expected);
+    assert.equal(fixture.counts.signs, 0);
     assert.deepEqual(await signReceipt({ ...receiptClaims(), protocol_revision: 3 }, fixture.handle, world.genesisView, opts), expected);
     assert.equal(fixture.counts.signs, 0);
   }
@@ -1311,4 +1322,79 @@ test("throwing claim and context getters return input errors before signing", as
   const chain = Object.defineProperty(copyChain(world.genesisView), "revisions", { enumerable: true, get() { throw new Error("context unreadable"); } });
   assert.deepEqual(await signReceipt(receiptClaims(), handle, chain), { ok: false, error: "invalid_input", code: "invalid_type" });
   assert.equal(counts.signs, 0);
+});
+
+test("the verifier checks canonical key encodings and lengths before signing", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const good = derivedPublic(keys.privateKey);
+  let signs = 0;
+  for (const publicKey of [good + "=", Buffer.alloc(31).toString("base64url"), Buffer.alloc(33).toString("base64url"), Buffer.alloc(32).toString("base64url"), "not base64url"]) {
+    const handle: KeyHandle = {
+      keyIdentity: () => ({ kid: "issuer-key-001", publicKey }),
+      sign(message) { signs += 1; return nodeSign(null, message, keys.privateKey); },
+    };
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call({}), { ok: false, error: "invalid_key_handle" }, kind);
+      assert.equal(signs, 0, kind);
+    }
+  }
+});
+
+test("signature faults and truncated real signatures remain signing_failed", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const publicKey = derivedPublic(keys.privateKey);
+  for (const failure of ["crypto", "length"] as const) {
+    let signs = 0;
+    const handle: KeyHandle = {
+      keyIdentity: () => ({ kid: "issuer-key-001", publicKey }),
+      sign(message) {
+        signs += 1;
+        if (failure === "crypto") return nodeSign("unsupported-digest", message, keys.privateKey);
+        return nodeSign(null, message, keys.privateKey).subarray(0, 63);
+      },
+    };
+    for (const { kind, call } of signingCalls(handle)) {
+      const before = signs;
+      assert.deepEqual(await call({}), { ok: false, error: "signing_failed" }, kind);
+      assert.equal(signs, before + 1, kind);
+    }
+  }
+});
+
+test("completion errors map to the bare verification_failed result", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const publicKey = derivedPublic(keys.privateKey);
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity: () => ({ kid: "issuer-key-001", publicKey }),
+    sign(message) {
+      signs += 1;
+      // The callback signs altered bytes; the retained plan still has the
+      // prepared message and rejects this real signature on completion.
+      message[0] ^= 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  for (const { kind, call } of signingCalls(handle)) {
+    const before = signs;
+    assert.deepEqual(await call({}), { ok: false, error: "verification_failed" }, kind);
+    assert.equal(signs, before + 1, kind);
+  }
+});
+
+test("Ed25519 compacts retain byte identity with the build-only producer surface", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const { handle } = rawKeyHandle(Buffer.alloc(32, 11), "issuer-key-001");
+  for (const { kind, claims, call } of signingCalls(handle)) {
+    const built = kind === "descriptor" ? descriptorSigningInput("issuer-key-001", claims) :
+      kind === "receipt" ? receiptSigningInput("issuer-key-001", claims) :
+      kind === "acceptance" ? acceptanceSigningInput("issuer-key-001", claims, world.genesisView) :
+      terminationSigningInput("issuer-key-001", claims, world.genesisView);
+    assert.ok(built.ok, JSON.stringify(built));
+    const expected = assembleCompact(built.input, nodeSign(null, built.input.message, keys.privateKey));
+    assert.ok(expected.ok, JSON.stringify(expected));
+    const result = await call({});
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.equal(Object.values(result.result)[0], expected.compact, kind);
+  }
 });
