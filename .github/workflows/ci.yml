@@ -38,8 +38,14 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Typecheck the workshop (browser target)
+        run: npm run typecheck:web
+
       - name: Build
         run: npm run build
+
+      - name: Build the workshop site
+        run: npm run build:site
 
       - name: Pack (content boundary)
         run: npm pack --dry-run

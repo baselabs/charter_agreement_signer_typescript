@@ -87,9 +87,13 @@ The acceptance/termination `view` is `{ revisionText, descriptorCompacts,
 chain }`: the revision the claims name, the signing party's descriptor
 chain, and the caller's full `ChainView` (`{ revisions, acceptances,
 descriptors, terminations }`) the refusal guards verify and bind against.
-The signer copies these arrays, the descriptor list and the revision text
-at entry, before awaiting either key callback. Receipts also copy their
-chain arrays at entry.
+The descriptor list holds only the signing party's descriptor history.
+The signer copies the claims, these arrays, the descriptor list and the
+revision text at entry, before awaiting either key callback. Receipts also
+copy their chain arrays at entry.
+
+`opts` is absent or an object `{ algorithm? }`. Any other value is
+`invalid_input` with `code: "invalid_type"`, before either key callback.
 
 Errors are closed: `{ ok: false, error: "invalid_key_handle" \| "signing_failed"
 \| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides
@@ -129,11 +133,14 @@ without a verifier version change.
 
 - Linux CI runs the suite on Node 24.8.0 and the current Node 24 line.
   Real Node crypto mints Ed25519 and ML-DSA-65 genesis descriptors. A
-  bundle using the workshop's browser shims mints Ed25519 and refuses
-  ML-DSA-65; the current signer returns `signing_failed` for that refusal.
-- This repository does not run an Elixir cross-check. The Elixir signer's
-  existing check uses its older in-tree TypeScript copy, so it does not
-  establish parity for this package.
+  bundle using the workshop's browser shims mints Ed25519. On that bundle,
+  which cannot verify ML-DSA-65, an ML-DSA-65 request reaches the key and then
+  fails the wrong-key guard with `signing_failed`; the shim's verifier reports
+  `algorithm_unsupported_on_substrate` for an ML-DSA-65 artifact.
+- This repository does not run an Elixir cross-check. The Elixir signer pins
+  this repository at a public commit and runs this package's own test suite;
+  it does not yet compare what the two signers produce or refuse, so it does
+  not establish parity.
 - Framing, the producer claims gate, refusal guards, and assembly are the
   verifier package's producer surface (0.6.0). What remains here is
   custody plus input policing: the issuing-view discipline composes the

@@ -71,7 +71,7 @@ test("browser shim mints and verifies an Ed25519 genesis descriptor", async () =
   assert.ok(browser.verifyDescriptor(result.result.descriptor).ok);
 });
 
-test("browser shim refuses a real ML-DSA-65 genesis descriptor", async () => {
+test("on the browser shim, which cannot verify ML-DSA-65, signing fails after the key and the verifier reports the substrate", async () => {
   const fixture = genesis("ML-DSA-65");
   const native = await signDescriptor(fixture.claims, fixture.handle, { algorithm: "ML-DSA-65" });
   assert.ok(native.ok, JSON.stringify(native));

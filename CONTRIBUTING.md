@@ -52,9 +52,10 @@ plain messages unless the maintainer asks otherwise. Do not use `git stash`.
   or handles that return invented signatures.
 - Search for tests of the old contract before changing behavior.
 
-This repository does not run an Elixir cross-check. The Elixir signer's
-current cross-check uses its in-tree TypeScript copy, which does not
-certify this npm package. The local suite verifies artifacts through the
+This repository does not run an Elixir cross-check. The Elixir signer pins
+this repository at a public commit and runs this package's own test suite;
+it does not compare what the two signers produce or refuse, so it does not
+certify parity. The local suite verifies artifacts through the
 published TypeScript verifier.
 
 ## Protocol dependency changes

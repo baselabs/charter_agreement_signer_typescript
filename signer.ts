@@ -73,6 +73,18 @@ function copyChainView(chain: ChainView): ChainView {
   };
 }
 
+// Claims are copied at entry too, so a key callback cannot change the
+// claims that get framed after its snapshot. Values that cannot be cloned
+// pass through unchanged and the producer rejects them.
+function copyClaims(claims: Record<string, unknown>): Record<string, unknown> {
+  if (!claims || typeof claims !== "object") return claims;
+  try {
+    return structuredClone(claims);
+  } catch (_uncloneable) {
+    return claims;
+  }
+}
+
 function copyIssuingView(view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView }): typeof view {
   if (!view || typeof view !== "object") return view;
   return {
@@ -118,7 +130,13 @@ async function signProduced(
   produce: (kid: string, algorithm?: string) => ProducerResult,
   opts: { algorithm?: string | null },
 ): Promise<{ input: SigningInput; signature: Buffer } | SignError> {
-  const algorithm = opts?.algorithm ?? defaultEmissionName();
+  // Options are an object or absent, as the Elixir signer takes a map or a
+  // keyword list: null, a number, an array or a bare string is caller input
+  // error, never a silent default.
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
+    return { error: "invalid_input", code: "invalid_type" };
+  }
+  const algorithm = opts.algorithm ?? defaultEmissionName();
   if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
     return { error: "invalid_input", code: "algorithm_unsupported" };
   }
@@ -201,6 +219,7 @@ export async function signDescriptor(
   keyHandle: unknown,
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ descriptor: string }>> {
+  claims = copyClaims(claims);
   const signed = await signProduced(keyHandle, (kid, algorithm) => descriptorSigningInput(kid, claims, algorithm), opts);
   if ("error" in signed) return { ok: false, ...signed };
   const assembled = compactOrInvalid(signed);
@@ -216,6 +235,7 @@ export async function signReceipt(
   chain: ChainView,
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ receipt: string }>> {
+  claims = copyClaims(claims);
   chain = copyChainView(chain);
   // The issuing view is REQUIRED (the reference takes ChainFacts or a
   // CharterRevision, never none) and its discipline runs after the build,
@@ -244,6 +264,7 @@ export async function signAcceptance(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ acceptance: string }>> {
+  claims = copyClaims(claims);
   view = copyIssuingView(view);
   const viewChain = viewChainOrInvalid(view);
   const signed = await signProduced(keyHandle, (kid, algorithm) => {
@@ -264,6 +285,7 @@ export async function signTermination(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ termination: string }>> {
+  claims = copyClaims(claims);
   view = copyIssuingView(view);
   const viewChain = viewChainOrInvalid(view);
   const signed = await signProduced(keyHandle, (kid, algorithm) => {

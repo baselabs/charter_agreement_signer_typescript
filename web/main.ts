@@ -291,10 +291,10 @@ async function doForm(): Promise<void> {
 }
 
 async function doAccept(): Promise<void> {
-  for (const [p, other] of [[issuer, acceptor], [acceptor, issuer]] as const) {
+  for (const p of [issuer, acceptor]) {
     const r = await signAcceptance(acceptanceClaims(p.pdd!, p.role), handle(p), {
       revisionText: genesisText,
-      descriptorCompacts: [p.descriptor!, other.descriptor!],
+      descriptorCompacts: [p.descriptor!],
       chain: view({ acceptances: acceptanceIssuer ? [acceptanceIssuer] : [] }),
     });
     if (!r.ok) { setVerdict("fail", `signAcceptance (${p.role}) → ${r.error}${"code" in r ? " " + (r as { code?: string }).code : ""}`); return; }

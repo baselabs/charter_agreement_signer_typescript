@@ -3,8 +3,8 @@
 // Signer tests: raw test key handles (Ed25519 from deterministic seeds)
 // exercise the full custody path per artifact kind —
 // snapshot → producer (provisional framing + refusals) → sign → wrong-key
-// guard → assemble → post-sign verify through the verifier package. The
-// These tests verify through the published TypeScript verifier.
+// guard → assemble → post-sign verify through the verifier package. These
+// tests verify through the published TypeScript verifier.
 import assert from "node:assert/strict";
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from "node:crypto";
 import { before, test } from "node:test";
@@ -308,6 +308,70 @@ test("Node mints Ed25519 and ML-DSA-65 genesis descriptors with real keys", asyn
   }
 });
 
+function callbackCounts(seed: number, kid: string) {
+  const keys = ed25519FromSeed(Buffer.alloc(32, seed));
+  const counts = { identities: 0, signs: 0 };
+  const handle: KeyHandle = {
+    keyIdentity() {
+      counts.identities += 1;
+      return { kid, publicKey: derivedPublic(keys.privateKey) };
+    },
+    sign(message) {
+      counts.signs += 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  return { handle, counts };
+}
+
+test("an options argument that is not an object is invalid_type before either key callback", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const opts of [null, 42, [], "ML-DSA-65", true]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call(opts as never),
+        { ok: false, error: "invalid_input", code: "invalid_type" }, `${kind} ${JSON.stringify(opts)}`);
+    }
+  }
+  assert.equal(counts.identities, 0);
+  assert.equal(counts.signs, 0);
+});
+
+test("a handle that is not an object, or whose keyIdentity throws, is invalid_key_handle before signing", async () => {
+  let signs = 0;
+  const throwing = {
+    keyIdentity() {
+      throw new Error("custody unavailable");
+    },
+    sign() {
+      signs += 1;
+      return new Uint8Array(64);
+    },
+  };
+  for (const handle of [undefined, null, 7, "handle", throwing]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call({}), { ok: false, error: "invalid_key_handle" }, `${kind} ${String(handle)}`);
+    }
+  }
+  assert.equal(signs, 0);
+});
+
+test("claims changed by a key callback after entry do not change what is signed", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const claims = structuredClone(receiptClaims()) as Record<string, any>;
+  const original = structuredClone(claims);
+  const handle: KeyHandle = {
+    keyIdentity() {
+      claims.outcome = "effect_failed";
+      return { kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) };
+    },
+    sign: (message) => nodeSign(null, message, keys.privateKey),
+  };
+  const result = await signReceipt(claims, handle, world.genesisView);
+  assert.ok(result.ok, JSON.stringify(result));
+  const payload = JSON.parse(Buffer.from(result.result.receipt.split(".")[1], "base64url").toString("utf8"));
+  assert.equal(payload.outcome, original.outcome);
+});
+
 test("signDescriptor: full custody path, post-verified at revision 2", async () => {
   const { handle } = rawKeyHandle(Buffer.alloc(32, 1), "test-key-001");
 
@@ -346,9 +410,18 @@ test("signDescriptor refuses a claims/algorithm mismatch before any key use", as
     effective_from: "2026-08-25T10:00:00Z",
   };
 
-  const result = await signDescriptor(claims, handle);
+  let signs = 0;
+  const counted: KeyHandle = {
+    keyIdentity: (h) => (handle as KeyHandle).keyIdentity(h),
+    sign(message, h) {
+      signs += 1;
+      return (handle as KeyHandle).sign(message, h);
+    },
+  };
+  const result = await signDescriptor(claims, counted);
   assert.ok(!result.ok);
   assert.equal((result as { error: string; code?: string }).code, "signing_input_invalid");
+  assert.equal(signs, 0);
 });
 
 test("the wrong-key guard rejects a signature from a different key", async () => {
