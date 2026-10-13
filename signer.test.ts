@@ -1302,3 +1302,13 @@ test("raised limits prepare and finish a receipt larger than the default compact
     { ok: false, error: "invalid_input", code: "signing_input_invalid" });
   assert.equal(counts.signs, before);
 });
+
+test("throwing claim and context getters return input errors before signing", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const claims = Object.defineProperty({}, "protocol_revision", { enumerable: true, get() { throw new Error("claims unreadable"); } });
+  assert.deepEqual(await signDescriptor(claims, handle), { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+  assert.equal(counts.signs, 0);
+  const chain = Object.defineProperty(copyChain(world.genesisView), "revisions", { enumerable: true, get() { throw new Error("context unreadable"); } });
+  assert.deepEqual(await signReceipt(receiptClaims(), handle, chain), { ok: false, error: "invalid_input", code: "invalid_type" });
+  assert.equal(counts.signs, 0);
+});

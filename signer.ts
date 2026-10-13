@@ -180,9 +180,18 @@ async function signPrepared(
 ): Promise<{ compact: string } | SignError> {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
-  claims = copyClaims(claims);
-  const retained = kind === "descriptor" ? options.predecessor ?? null :
-    typeof context === "string" ? context : copyChainView(context as ChainView);
+  try {
+    claims = copyClaims(claims);
+  } catch (_getter) {
+    return { error: "invalid_input", code: "signing_input_invalid" };
+  }
+  let retained: DescriptorPredecessor | ChainView | string | null;
+  try {
+    retained = kind === "descriptor" ? options.predecessor ?? null :
+      typeof context === "string" ? context : copyChainView(context as ChainView);
+  } catch (_getter) {
+    return { error: "invalid_input", code: "invalid_type" };
+  }
   const snapshot = await resolveKeyIdentity(keyHandle);
   if ("error" in snapshot) return snapshot;
 
