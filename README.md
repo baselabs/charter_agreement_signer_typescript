@@ -20,7 +20,7 @@ and verifies the artifact against the supplied context.
 npm install @charter-agreement-protocol/signer
 ```
 
-Release **0.2.2** requires Node >= 24.8.0 (ML-DSA support in the Node builtins)
+Release **0.3.0** requires Node >= 24.8.0 (ML-DSA support in the Node builtins)
 and depends on `@charter-agreement-protocol/verifier` `^0.6.0`.
 
 ## Quickstart
