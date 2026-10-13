@@ -2,114 +2,12 @@
 // the REAL published code: @charter-agreement-protocol/signer for signing (via
 // this repository's source) and the verifier package it delegates to, bundled
 // with node:crypto/fs/path shims. Two parties' keys are generated in your
-// browser; the private keys never enter either library.
-import { keygen, sign as nobleSign } from "@noble/ed25519";
-import { sha256 } from "@noble/hashes/sha2.js";
-import {
-  signAcceptance,
-  signDescriptor,
-  signReceipt,
-  type ChainView,
-} from "../signer.js";
-import {
-  verifyChain,
-  verifyDescriptor,
-} from "@charter-agreement-protocol/verifier";
+// browser; the private keys never enter either library. The signing flow
+// lives in ./flow.ts; this file renders it.
+import { verifyChain } from "@charter-agreement-protocol/verifier";
+import { Workshop, type World } from "./flow.js";
 
-interface CustodyKey {
-  publicKeyB64: string;
-  sign: (m: Uint8Array) => Promise<Uint8Array>;
-  mode: "WebCrypto non-extractable" | "in-page (noble)";
-}
-
-async function makeKey(): Promise<CustodyKey> {
-  try {
-    const kp = (await crypto.subtle.generateKey({ name: "Ed25519" } as Algorithm, false, ["sign"])) as CryptoKeyPair;
-    const raw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
-    return {
-      publicKeyB64: Buffer.from(raw).toString("base64url"),
-      sign: async (m) => new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, m as BufferSource)),
-      mode: "WebCrypto non-extractable",
-    };
-  } catch {
-    const kp = keygen();
-    return {
-      publicKeyB64: Buffer.from(kp.publicKey).toString("base64url"),
-      sign: async (m) => nobleSign(m, kp.secretKey),
-      mode: "in-page (noble)",
-    };
-  }
-}
-
-// ---------- the demo world (mirrors the package's own test fixture) ----------
-
-interface Party { key: CustodyKey; kid: string; descriptor?: string; pdd?: string; role: "issuer" | "acceptor" }
-let issuer: Party, acceptor: Party;
-let genesisText = "", genesisDigest = "";
-let acceptanceIssuer = "", acceptanceAcceptor = "";
-let receipt = "";
-// Deterministic fixture digests: hash the seed so every demo digest READS like
-// a digest (43 base64url chars of real SHA-256 output) instead of a repeated
-// letter — the shape the protocol's digest fields validate either way.
-const dg = (seed: string): string =>
-  "sha-256:" + Buffer.from(sha256(new TextEncoder().encode("demo:" + seed))).toString("base64url");
-
-function revisionText(overrides: Record<string, unknown>): string {
-  // Mirrors the package's own test fixture exactly: the genesis revision
-  // carries NO charter_id (successors stamp it); key order is the fixture's.
-  return JSON.stringify({
-    abp_bindings: [{
-      blueprint_id: "example.demo/echo",
-      content_digest: dg("P"),
-      deployment_digest: dg("Q"),
-      party_role: "acceptor",
-      release_number: 1,
-    }],
-    attribution_declaration: { basis: "bound_deployments" },
-    effective_from: "2026-08-25T12:00:00Z",
-    extensions: { critical: {}, optional: {} },
-    legal_text: { content_digest: dg("L"), media_type: "text/plain" },
-    parties: [
-      { party_descriptor_digest: issuer.pdd as string, role: "issuer" },
-      { party_descriptor_digest: acceptor.pdd as string, role: "acceptor" },
-    ],
-    precedence_declaration: "legal_text_governs",
-    protocol_revision: 2,
-    receipt_profile: "com.example.charter/default",
-    revision_number: 1,
-    termination_rules: { reason_codes: ["mutual", "breach"] },
-    ...overrides,
-  });
-}
-
-const view = (extra: Partial<ChainView> = {}): ChainView => ({
-  revisions: [genesisText],
-  acceptances: [acceptanceIssuer, acceptanceAcceptor],
-  descriptors: [issuer.descriptor!, acceptor.descriptor!],
-  terminations: [],
-  ...extra,
-});
-
-function chainDigest(texts: string[], index: number): string {
-  const verified = verifyChain({ revisions: texts, acceptances: [], descriptors: [issuer.descriptor!, acceptor.descriptor!], terminations: [] });
-  if (!verified.ok) throw new Error("chain fixture failed: " + JSON.stringify(verified));
-  return (verified.facts.revisions as { digest: string }[])[index].digest;
-}
-
-const handle = (p: Party) => ({
-  keyIdentity: () => ({ kid: p.kid, publicKey: p.key.publicKeyB64 }),
-  sign: (m: Uint8Array) => p.key.sign(m),
-});
-
-const acceptanceClaims = (pdd: string, role: string) => ({
-  protocol_revision: 2,
-  accepted_at: "2026-08-25T13:00:00Z",
-  charter_id: genesisDigest,
-  party_descriptor_digest: pdd,
-  party_role: role,
-  revision_digest: genesisDigest,
-  revision_number: 1,
-});
+const ws = new Workshop();
 
 // ---------- DOM ----------
 
@@ -267,66 +165,30 @@ function setVerdict(state: "idle" | "ok" | "fail", html: string): void {
 // ---------- the four steps ----------
 
 async function doForm(): Promise<void> {
-  for (const p of [issuer, acceptor]) {
-    const r = await signDescriptor({
-      protocol_revision: 2, descriptor_number: 1,
-      verification_keys: [{ key_id: p.kid, algorithm: "Ed25519", public_key: p.key.publicKeyB64, status: "active" }],
-      attestation_hints: [], extensions: { critical: {}, optional: {} },
-      effective_from: "2026-08-25T10:00:00Z",
-    }, handle(p));
-    if (!r.ok) { setVerdict("fail", `signDescriptor → ${r.error}${"code" in r ? " " + (r as { code?: string }).code : ""}`); return; }
-    p.descriptor = r.result.descriptor;
-    const v = verifyDescriptor(p.descriptor);
-    if (!v.ok) { setVerdict("fail", "post-sign verify failed"); return; }
-    p.pdd = v.facts.descriptor_digest as string;
-  }
-  genesisText = revisionText({});
-  genesisDigest = chainDigest([genesisText], 0);
-  slot("slot-desc-a", artifactCard("grant", "cap+party", `${issuer.kid}`, issuer.descriptor!));
-  slot("slot-desc-b", artifactCard("proof", "cap+party", `${acceptor.kid}`, acceptor.descriptor!));
-  slot("slot-revision", artifactCard("grant", "revision", `digest ${genesisDigest.slice(0, 14)}…`, genesisText));
+  const r = await ws.form();
+  if (!r.ok) { setVerdict("fail", r.message); return; }
+  slot("slot-desc-a", artifactCard("grant", "cap+party", `${ws.issuer.kid}`, ws.issuer.descriptor!));
+  slot("slot-desc-b", artifactCard("proof", "cap+party", `${ws.acceptor.kid}`, ws.acceptor.descriptor!));
+  slot("slot-revision", artifactCard("grant", "revision", `digest ${ws.genesisDigest.slice(0, 14)}…`, ws.genesisText));
   flash($("lane-form"));
   bAccept.disabled = false;
   setVerdict("idle", "two descriptors + the genesis revision — now both parties accept");
 }
 
 async function doAccept(): Promise<void> {
-  for (const p of [issuer, acceptor]) {
-    const r = await signAcceptance(acceptanceClaims(p.pdd!, p.role), handle(p), {
-      revisionText: genesisText,
-      descriptorCompacts: [p.descriptor!],
-      chain: view({ acceptances: acceptanceIssuer ? [acceptanceIssuer] : [] }),
-    });
-    if (!r.ok) { setVerdict("fail", `signAcceptance (${p.role}) → ${r.error}${"code" in r ? " " + (r as { code?: string }).code : ""}`); return; }
-    if (p === issuer) acceptanceIssuer = r.result.acceptance; else acceptanceAcceptor = r.result.acceptance;
-  }
-  slot("slot-acc-a", artifactCard("grant", "cap+acceptance", `issuer signs revision 1`, acceptanceIssuer));
-  slot("slot-acc-b", artifactCard("proof", "cap+acceptance", `acceptor countersigns`, acceptanceAcceptor));
+  const r = await ws.accept();
+  if (!r.ok) { setVerdict("fail", r.message); return; }
+  slot("slot-acc-a", artifactCard("grant", "cap+acceptance", `issuer signs revision 1`, ws.acceptanceIssuer));
+  slot("slot-acc-b", artifactCard("proof", "cap+acceptance", `acceptor countersigns`, ws.acceptanceAcceptor));
   flash($("lane-accept"));
   bReceipt.disabled = false;
   setVerdict("idle", "bilateral assent complete — the charter is in force");
 }
 
 async function doReceipt(): Promise<void> {
-  const r = await signReceipt({
-    protocol_revision: 2,
-    charter_id: genesisDigest,
-    revision_number: 1,
-    revision_digest: genesisDigest,
-    issuing_party_role: "issuer",
-    agent_party_role: "acceptor",
-    deployment_digest: dg("Q"),
-    grant: { scheme: "bap", id: "grant-001", grant_digest: dg("E") },
-    invocation_id: "inv-001",
-    decision: "accepted",
-    outcome: "effect_committed",
-    occurred_at: "2026-08-25T13:30:00Z",
-    recorded_at: "2026-08-25T13:30:01Z",
-    extensions: { critical: {}, optional: {} },
-  }, handle(issuer), view());
-  if (!r.ok) { setVerdict("fail", `signReceipt → ${r.error}${"code" in r ? " " + (r as { code?: string }).code : ""}`); return; }
-  receipt = r.result.receipt;
-  slot("slot-receipt", artifactCard("proof", "cap+receipt", "bound to revision 1", receipt));
+  const r = await ws.signActionReceipt();
+  if (!r.ok) { setVerdict("fail", r.message); return; }
+  slot("slot-receipt", artifactCard("proof", "cap+receipt", "bound to revision 1", ws.receipt));
   flash($("lane-accept"));
   bVerify.disabled = false;
   tamperBtns.forEach((b) => (b.disabled = false));
@@ -366,53 +228,28 @@ function verifyWorld(w: { revisions: string[]; acceptances: string[]; descriptor
 
 function doVerify(): void {
   lastTamper = null;
-  verifyWorld(view(), "full set");
-  showWire("receipt (post-verified when signed)", receipt);
+  verifyWorld(ws.view(), "full set");
+  showWire("receipt (post-verified when signed)", ws.receipt);
 }
 
 async function tamper(kind: string): Promise<void> {
-  if (!receipt) return;
+  if (!ws.receipt) return;
   lastTamper = kind;
-  if (kind === "revision") {
-    // The terms change AFTER both parties accepted: the acceptances bind the
-    // original revision digest, so the rewritten text no longer matches.
-    const rewritten = revisionText({ legal_text: { content_digest: dg("S"), media_type: "text/plain" } });
-    verifyWorld({ revisions: [rewritten], acceptances: view().acceptances, descriptors: view().descriptors, terminations: [] }, "rewritten terms");
-    return;
-  }
-  if (kind === "receipt") {
-    verifyWorld({ revisions: [genesisText], acceptances: view().acceptances, descriptors: view().descriptors, terminations: [] }, "charter without receipt");
-    return;
-  }
-  if (kind === "descriptor") {
-    // Re-form the issuer descriptor under a FRESH key (a different identity
-    // claiming the same seat) and present the original acceptances.
-    const impostor = await makeKey();
-    const r = await signDescriptor({
-      protocol_revision: 2, descriptor_number: 1,
-      verification_keys: [{ key_id: issuer.kid, algorithm: "Ed25519", public_key: impostor.publicKeyB64, status: "active" }],
-      attestation_hints: [], extensions: { critical: {}, optional: {} },
-      effective_from: "2026-08-25T10:00:00Z",
-    }, { keyIdentity: () => ({ kid: issuer.kid, publicKey: impostor.publicKeyB64 }), sign: (m: Uint8Array) => impostor.sign(m) });
-    if (!r.ok) { setVerdict("fail", `impostor descriptor → ${r.error}`); return; }
-    verifyWorld({ revisions: [genesisText], acceptances: view().acceptances, descriptors: [r.result.descriptor, acceptor.descriptor!], terminations: [] }, "impostor descriptor");
-    return;
-  }
+  const world: World | { error: string } = await ws.tampered(kind);
+  if ("error" in world) { setVerdict("fail", world.error); return; }
+  verifyWorld(world, kind);
 }
 
 // ---------- boot ----------
 
 async function reset(): Promise<void> {
-  const [ik, ak] = await Promise.all([makeKey(), makeKey()]);
-  issuer = { key: ik, kid: "issuer-key-001", role: "issuer" };
-  acceptor = { key: ak, kid: "acceptor-key-001", role: "acceptor" };
-  genesisText = genesisDigest = acceptanceIssuer = acceptanceAcceptor = receipt = "";
+  await ws.reset();
   for (const id of ["slot-desc-a", "slot-desc-b", "slot-revision", "slot-acc-a", "slot-acc-b", "slot-receipt"]) $(id).textContent = "";
   bAccept.disabled = bReceipt.disabled = bVerify.disabled = true;
   tamperBtns.forEach((b) => (b.disabled = true));
   $("facts-body").textContent = "—";
   segTabs.innerHTML = ""; wireBody.textContent = "nothing selected yet";
-  $("custody-mode").textContent = `key custody: ${issuer.key.mode} (both parties)`;
+  $("custody-mode").textContent = `key custody: ${ws.issuer.key.mode} (both parties)`;
   setVerdict("idle", "form the charter to see the structural facts");
 }
 

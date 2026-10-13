@@ -9,7 +9,21 @@ import { build } from "esbuild";
 import { signDescriptor, type KeyHandle } from "./signer.ts";
 
 let bundleDirectory: string;
-let browser: typeof import("./index.ts") & Pick<typeof import("@charter-agreement-protocol/verifier"), "verifyDescriptor">;
+// The workshop flow (web/flow.ts) is typechecked under the browser target
+// (npm run typecheck:web); this structural type keeps DOM types out of the
+// Node typecheck.
+type BundledWorkshop = new () => {
+  reset(): Promise<void>;
+  form(): Promise<unknown>;
+  accept(): Promise<unknown>;
+  signActionReceipt(): Promise<unknown>;
+  view(): { revisions: string[]; acceptances: string[]; descriptors: string[]; terminations: string[] };
+  tampered(kind: string): Promise<object>;
+};
+let browser: typeof import("./index.ts") &
+  Pick<typeof import("@charter-agreement-protocol/verifier"), "verifyDescriptor" | "verifyChain"> & {
+    Workshop: BundledWorkshop;
+  };
 
 before(async () => {
   const root = fileURLToPath(new URL(".", import.meta.url));
@@ -17,7 +31,7 @@ before(async () => {
   const outfile = join(bundleDirectory, "signer.mjs");
   await build({
     stdin: {
-      contents: 'export * from "./index.ts"; export { verifyDescriptor } from "@charter-agreement-protocol/verifier";',
+      contents: 'export * from "./index.ts"; export { verifyDescriptor, verifyChain } from "@charter-agreement-protocol/verifier"; export { Workshop } from "./web/flow.ts";',
       resolveDir: root,
     },
     absWorkingDir: root,
@@ -80,4 +94,21 @@ test("on the browser shim, which cannot verify ML-DSA-65, signing fails after th
   const result = await browser.signDescriptor(fixture.claims, fixture.handle, { algorithm: "ML-DSA-65" });
   assert.deepEqual(result, { ok: false, error: "signing_failed" });
   assert.equal(fixture.signs(), 2);
+});
+
+test("the workshop flow, bundled with the site's browser shims, forms, accepts, signs a receipt and verifies", async () => {
+  const ws = new browser.Workshop();
+  await ws.reset();
+  assert.deepEqual(await ws.form(), { ok: true });
+  assert.deepEqual(await ws.accept(), { ok: true });
+  assert.deepEqual(await ws.signActionReceipt(), { ok: true });
+  const verified = browser.verifyChain(ws.view());
+  assert.ok(verified.ok, JSON.stringify(verified));
+  // The evidence checks: rewritten terms and an impostor key fail; the
+  // charter without the receipt still verifies.
+  for (const [kind, expectOk] of [["revision", false], ["descriptor", false], ["receipt", true]] as const) {
+    const world = await ws.tampered(kind);
+    assert.ok(!("error" in world), kind);
+    assert.equal(browser.verifyChain(world as never).ok, expectOk, kind);
+  }
 });

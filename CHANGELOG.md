@@ -25,6 +25,13 @@ documented here.
 - Rename the handle error from `invalid_handle` to `invalid_key_handle`.
   Migration: update error comparisons and exhaustive switches to the new
   string. The result shape is unchanged.
+- Options must be absent or a plain object whose only key is `algorithm`.
+  Anything else returns `invalid_input` with `code: "invalid_type"` before
+  either key callback: `null`, a number, an array, a bare algorithm string,
+  a misspelled or unknown key, a `Map` or class instance, or a throwing
+  getter. These used to fall back to the defaults silently, so a misspelled
+  `algorithm` key signed with Ed25519. Migration: pass `{ algorithm }` or
+  nothing.
 
 ### Changed
 
@@ -36,15 +43,13 @@ documented here.
   cross-check, and the Elixir signer, which pins this repository at a public
   commit and runs this package's suite, does not compare the two signers'
   output, so no parity is established. This package has no telemetry.
-- An options argument that is not an object (`null`, a number, an array,
-  a bare algorithm string) returns `invalid_input` with
-  `code: "invalid_type"` before either key callback, as the Elixir signer
-  treats options that are neither a map nor a keyword list. It used to fall
-  back to the defaults silently.
 - Copy the claims at entry too, so a key callback cannot change what is
-  framed after its snapshot.
+  framed after its snapshot. The copy reads plain objects and arrays
+  through property access, so Proxy-backed state (Vue, MobX, Immer) is
+  copied too.
 - `npm run build` removes `dist/` first, so a local pack cannot ship stale
-  modules. CI also typechecks and builds the workshop site.
+  modules. CI also typechecks and builds the workshop site, and a test runs
+  the workshop's signing flow bundled with the site's browser shims.
 - Copy the caller's chain arrays and acceptance/termination issuing view
   at entry, before the first `await`. Key callbacks cannot change the
   context used by the producers or post-sign verification.

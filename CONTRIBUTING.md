@@ -53,8 +53,9 @@ plain messages unless the maintainer asks otherwise. Do not use `git stash`.
 - Search for tests of the old contract before changing behavior.
 
 This repository does not run an Elixir cross-check. The Elixir signer pins
-this repository at a public commit and runs this package's own test suite;
-it does not compare what the two signers produce or refuse, so it does not
+this repository at a public commit, runs this package's own test suite and
+checks that a descriptor this package signs verifies under the Elixir CAP.
+It does not compare what the two signers produce or refuse, so it does not
 certify parity. The local suite verifies artifacts through the
 published TypeScript verifier.
 

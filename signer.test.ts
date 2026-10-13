@@ -336,6 +336,20 @@ test("an options argument that is not an object is invalid_type before either ke
   assert.equal(counts.signs, 0);
 });
 
+test("unknown option keys, non-plain option objects and throwing option getters are invalid_type", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  class Options { algorithm = "Ed25519"; }
+  const throwing = Object.defineProperty({}, "algorithm", { enumerable: true, get() { throw new Error("getter"); } });
+  for (const opts of [{ algoritm: "ML-DSA-65" }, { algorithm: "Ed25519", extra: true }, new Map([["algorithm", "Ed25519"]]), new Options(), throwing]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call(opts as never),
+        { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
+    }
+  }
+  assert.equal(counts.identities, 0);
+  assert.equal(counts.signs, 0);
+});
+
 test("a handle that is not an object, or whose keyIdentity throws, is invalid_key_handle before signing", async () => {
   let signs = 0;
   const throwing = {
@@ -355,21 +369,72 @@ test("a handle that is not an object, or whose keyIdentity throws, is invalid_ke
   assert.equal(signs, 0);
 });
 
-test("claims changed by a key callback after entry do not change what is signed", async () => {
+test("claims changed by a key callback after entry do not change what is signed, for every kind and for Proxy claims", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
-  const claims = structuredClone(receiptClaims()) as Record<string, any>;
-  const original = structuredClone(claims);
-  const handle: KeyHandle = {
-    keyIdentity() {
-      claims.outcome = "effect_failed";
-      return { kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) };
+  const publicKey = derivedPublic(keys.privateKey);
+  const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView };
+  const kinds: Array<{ kind: string; claims: () => Record<string, any>; field: string; changed: unknown; call: (claims: Record<string, unknown>, handle: KeyHandle) => Promise<any> }> = [
+    {
+      kind: "descriptor",
+      claims: () => ({
+        protocol_revision: 2,
+        descriptor_number: 1,
+        verification_keys: [{ key_id: "issuer-key-001", algorithm: "Ed25519", public_key: publicKey, status: "active" }],
+        attestation_hints: [],
+        extensions: { critical: {}, optional: {} },
+        effective_from: "2026-08-25T10:00:00Z",
+      }),
+      field: "effective_from",
+      changed: "2026-08-25T11:00:00Z",
+      call: (claims, handle) => signDescriptor(claims, handle),
     },
-    sign: (message) => nodeSign(null, message, keys.privateKey),
-  };
-  const result = await signReceipt(claims, handle, world.genesisView);
-  assert.ok(result.ok, JSON.stringify(result));
-  const payload = JSON.parse(Buffer.from(result.result.receipt.split(".")[1], "base64url").toString("utf8"));
-  assert.equal(payload.outcome, original.outcome);
+    { kind: "receipt", claims: () => structuredClone(receiptClaims()) as Record<string, any>, field: "outcome", changed: "effect_failed", call: (claims, handle) => signReceipt(claims, handle, world.genesisView) },
+    { kind: "acceptance", claims: () => structuredClone(world.genesisIssuerClaims), field: "accepted_at", changed: "2026-08-25T13:00:01Z", call: (claims, handle) => signAcceptance(claims, handle, view) },
+    {
+      kind: "termination",
+      claims: () => ({
+        protocol_revision: 2,
+        charter_id: world.genesisDigest,
+        governing_revision_digest: world.genesisDigest,
+        party_descriptor_digest: world.issuer.pdd,
+        party_role: "issuer",
+        reason_code: "mutual",
+        issued_at: "2026-08-25T14:00:00Z",
+        effective_at: "2026-08-25T15:00:00Z",
+      }),
+      field: "reason_code",
+      changed: "breach",
+      call: (claims, handle) => signTermination(claims, handle, view),
+    },
+  ];
+  const wrappers: Array<[string, (claims: Record<string, any>) => Record<string, any>]> = [
+    ["plain", (claims) => claims],
+    ["proxy", (claims) => new Proxy(claims, {})],
+    ["nested proxy", (claims) => {
+      const key = Object.keys(claims).find((name) => typeof claims[name] === "object" && claims[name] !== null);
+      if (key) claims[key] = new Proxy(claims[key], {});
+      return new Proxy(claims, {});
+    }],
+  ];
+  for (const { kind, claims: make, field, changed, call } of kinds) {
+    for (const [label, wrap] of wrappers) {
+      const target = make();
+      const original = target[field];
+      const claims = wrap(target);
+      const handle: KeyHandle = {
+        keyIdentity() {
+          target[field] = changed;
+          return { kid: "issuer-key-001", publicKey };
+        },
+        sign: (message) => nodeSign(null, message, keys.privateKey),
+      };
+      const result = await call(claims, handle);
+      assert.ok(result.ok, `${kind} ${label}: ${JSON.stringify(result)}`);
+      const compact = Object.values(result.result)[0] as string;
+      const payload = JSON.parse(Buffer.from(compact.split(".")[1], "base64url").toString("utf8"));
+      assert.equal(payload[field], original, `${kind} ${label}`);
+    }
+  }
 });
 
 test("signDescriptor: full custody path, post-verified at revision 2", async () => {

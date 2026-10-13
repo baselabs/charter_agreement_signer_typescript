@@ -92,8 +92,10 @@ The signer copies the claims, these arrays, the descriptor list and the
 revision text at entry, before awaiting either key callback. Receipts also
 copy their chain arrays at entry.
 
-`opts` is absent or an object `{ algorithm? }`. Any other value is
-`invalid_input` with `code: "invalid_type"`, before either key callback.
+`opts` is absent or a plain object whose only key is `algorithm`. Anything
+else (another value, a misspelled or unknown key, a `Map` or class instance,
+a throwing getter) is `invalid_input` with `code: "invalid_type"`, before
+either key callback.
 
 Errors are closed: `{ ok: false, error: "invalid_key_handle" \| "signing_failed"
 \| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides
@@ -138,9 +140,10 @@ without a verifier version change.
   fails the wrong-key guard with `signing_failed`; the shim's verifier reports
   `algorithm_unsupported_on_substrate` for an ML-DSA-65 artifact.
 - This repository does not run an Elixir cross-check. The Elixir signer pins
-  this repository at a public commit and runs this package's own test suite;
-  it does not yet compare what the two signers produce or refuse, so it does
-  not establish parity.
+  this repository at a public commit, runs this package's own test suite and
+  checks that a descriptor this package signs verifies under the Elixir CAP.
+  It does not compare what the two signers produce or refuse, so it does not
+  establish parity.
 - Framing, the producer claims gate, refusal guards, and assembly are the
   verifier package's producer surface (0.6.0). What remains here is
   custody plus input policing: the issuing-view discipline composes the

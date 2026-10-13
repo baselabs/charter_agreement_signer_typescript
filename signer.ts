@@ -74,15 +74,26 @@ function copyChainView(chain: ChainView): ChainView {
 }
 
 // Claims are copied at entry too, so a key callback cannot change the
-// claims that get framed after its snapshot. Values that cannot be cloned
-// pass through unchanged and the producer rejects them.
+// claims that get framed after its snapshot. The copy walks plain objects
+// and arrays through ordinary property reads, so a Proxy (Vue, MobX, Immer
+// state) is copied like the object it presents. Any other value (a class
+// instance, a function, a bigint) is kept as is for the producer to judge,
+// as before; a cycle is kept by reference and the producer rejects it.
 function copyClaims(claims: Record<string, unknown>): Record<string, unknown> {
-  if (!claims || typeof claims !== "object") return claims;
-  try {
-    return structuredClone(claims);
-  } catch (_uncloneable) {
-    return claims;
-  }
+  const seen = new WeakSet<object>();
+  const copy = (value: unknown): unknown => {
+    if (value === null || typeof value !== "object") return value;
+    if (seen.has(value)) return value;
+    if (Array.isArray(value)) {
+      seen.add(value);
+      return value.map(copy);
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return value;
+    seen.add(value);
+    return Object.fromEntries(Object.keys(value).map((key) => [key, copy((value as Record<string, unknown>)[key])]));
+  };
+  return copy(claims) as Record<string, unknown>;
 }
 
 function copyIssuingView(view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView }): typeof view {
@@ -121,6 +132,23 @@ async function resolveKeyIdentity(
   }
 }
 
+// Options are a plain object with known keys only: a misspelled key must not
+// fall back to the default silently, and a Map, a class instance or a
+// throwing getter is caller input error, never a thrown exception.
+const OPTION_KEYS = new Set(["algorithm"]);
+
+function signingOptions(opts: unknown): { algorithm?: unknown } | null {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return null;
+  const prototype = Object.getPrototypeOf(opts);
+  if (prototype !== Object.prototype && prototype !== null) return null;
+  try {
+    if (!Object.keys(opts).every((key) => OPTION_KEYS.has(key))) return null;
+    return { algorithm: (opts as { algorithm?: unknown }).algorithm };
+  } catch (_getter) {
+    return null;
+  }
+}
+
 // The shared custody tail (the reference signer's): identity snapshot ->
 // producer (framing, claims schema, R1-R3 refusals - one implementation,
 // in the verifier package) -> sign via the handle -> wrong-key guard.
@@ -133,10 +161,9 @@ async function signProduced(
   // Options are an object or absent, as the Elixir signer takes a map or a
   // keyword list: null, a number, an array or a bare string is caller input
   // error, never a silent default.
-  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
-    return { error: "invalid_input", code: "invalid_type" };
-  }
-  const algorithm = opts.algorithm ?? defaultEmissionName();
+  const options = signingOptions(opts);
+  if (!options) return { error: "invalid_input", code: "invalid_type" };
+  const algorithm = options.algorithm ?? defaultEmissionName();
   if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
     return { error: "invalid_input", code: "algorithm_unsupported" };
   }
