@@ -21,6 +21,7 @@ import {
   algorithmRegistry,
   assembleCompact,
   defaultEmissionName,
+  decodeCharterRevision,
   descriptorSigningInput,
   emissions,
   receiptSigningInput,
@@ -33,6 +34,9 @@ import {
   verifyTermination,
   type ProducerResult,
   type SigningInput,
+  type DescriptorPredecessor,
+  type Limits,
+  type Profile,
 } from "@charter-agreement-protocol/verifier";
 
 export type KeySnapshot = { kid: string; publicKey: string };
@@ -57,6 +61,14 @@ export type ChainView = {
   descriptors: string[];
   terminations: string[];
 };
+
+export type SigningOptions = {
+  algorithm?: string | null;
+  limits?: Partial<Limits>;
+  profile?: Profile;
+};
+
+export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPredecessor | null };
 
 function copyArray(values: string[]): string[] {
   return Array.isArray(values) ? [...values] : values;
@@ -135,17 +147,30 @@ async function resolveKeyIdentity(
 // Options are a plain object with known keys only: a misspelled key must not
 // fall back to the default silently, and a Map, a class instance or a
 // throwing getter is caller input error, never a thrown exception.
-const OPTION_KEYS = new Set(["algorithm"]);
+const OPTION_KEYS = new Set(["algorithm", "limits", "profile"]);
 
-function signingOptions(opts: unknown): { algorithm?: unknown } | null {
-  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return null;
-  const prototype = Object.getPrototypeOf(opts);
-  if (prototype !== Object.prototype && prototype !== null) return null;
+function signingOptions(opts: unknown, descriptor: boolean): DescriptorOptions | SignError {
   try {
-    if (!Object.keys(opts).every((key) => OPTION_KEYS.has(key))) return null;
-    return { algorithm: (opts as { algorithm?: unknown }).algorithm };
+    if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return { error: "invalid_input", code: "invalid_type" };
+    const prototype = Object.getPrototypeOf(opts);
+    if (prototype !== Object.prototype && prototype !== null ||
+        !Reflect.ownKeys(opts).every((key) => typeof key === "string" && (OPTION_KEYS.has(key) || descriptor && key === "predecessor"))) {
+      return { error: "invalid_input", code: "invalid_type" };
+    }
+    const supplied = opts as DescriptorOptions;
+    const settings = copyClaims({ limits: supplied.limits, profile: supplied.profile }) as SigningOptions;
+    // The verifier resolves limits, then profile, before decoding any text.
+    const checked = decodeCharterRevision(undefined, settings);
+    if (!checked.ok && (checked.code === "invalid_limits" || checked.code === "invalid_profile")) {
+      return { error: "invalid_input", code: checked.code };
+    }
+    const algorithm = supplied.algorithm ?? defaultEmissionName();
+    if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
+      return { error: "invalid_input", code: "algorithm_unsupported" };
+    }
+    return { ...settings, algorithm, ...(descriptor ? { predecessor: supplied.predecessor } : {}) };
   } catch (_getter) {
-    return null;
+    return { error: "invalid_input", code: "invalid_type" };
   }
 }
 
@@ -156,17 +181,15 @@ function signingOptions(opts: unknown): { algorithm?: unknown } | null {
 async function signProduced(
   keyHandle: unknown,
   produce: (kid: string, algorithm?: string) => ProducerResult,
-  opts: { algorithm?: string | null },
+  opts: SigningOptions,
+  descriptor = false,
 ): Promise<{ input: SigningInput; signature: Buffer } | SignError> {
   // Options are an object or absent, as the Elixir signer takes a map or a
   // keyword list: null, a number, an array or a bare string is caller input
   // error, never a silent default.
-  const options = signingOptions(opts);
-  if (!options) return { error: "invalid_input", code: "invalid_type" };
-  const algorithm = options.algorithm ?? defaultEmissionName();
-  if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
-    return { error: "invalid_input", code: "algorithm_unsupported" };
-  }
+  const options = signingOptions(opts, descriptor);
+  if ("error" in options) return options;
+  const algorithm = options.algorithm as string;
   const snapshot = await resolveKeyIdentity(keyHandle);
   if ("error" in snapshot) return snapshot;
 
@@ -244,10 +267,10 @@ function viewChainOrInvalid(view: { chain: ChainView }): ChainView | { error: "i
 export async function signDescriptor(
   claims: Record<string, unknown>,
   keyHandle: unknown,
-  opts: { algorithm?: string | null } = {},
+  opts: DescriptorOptions = {},
 ): Promise<SignResult<{ descriptor: string }>> {
   claims = copyClaims(claims);
-  const signed = await signProduced(keyHandle, (kid, algorithm) => descriptorSigningInput(kid, claims, algorithm), opts);
+  const signed = await signProduced(keyHandle, (kid, algorithm) => descriptorSigningInput(kid, claims, algorithm), opts, true);
   if ("error" in signed) return { ok: false, ...signed };
   const assembled = compactOrInvalid(signed);
   if ("error" in assembled) return { ok: false, ...assembled };
@@ -260,7 +283,7 @@ export async function signReceipt(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   chain: ChainView,
-  opts: { algorithm?: string | null } = {},
+  opts: SigningOptions = {},
 ): Promise<SignResult<{ receipt: string }>> {
   claims = copyClaims(claims);
   chain = copyChainView(chain);
@@ -289,7 +312,7 @@ export async function signAcceptance(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
-  opts: { algorithm?: string | null } = {},
+  opts: SigningOptions = {},
 ): Promise<SignResult<{ acceptance: string }>> {
   claims = copyClaims(claims);
   view = copyIssuingView(view);
@@ -310,7 +333,7 @@ export async function signTermination(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
-  opts: { algorithm?: string | null } = {},
+  opts: SigningOptions = {},
 ): Promise<SignResult<{ termination: string }>> {
   claims = copyClaims(claims);
   view = copyIssuingView(view);

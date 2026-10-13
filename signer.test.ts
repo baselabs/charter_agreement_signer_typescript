@@ -1039,3 +1039,37 @@ test("view-shape defects outrank claims defects (the reference function head)", 
   assert.equal((claimsBadAndViewMissing as { code?: string }).code, "signing_input_invalid");
   assert.equal(counted.touches(), 0);
 });
+
+test("limits and profiles use verifier errors before algorithms and key callbacks", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const invalidLimits = [null, 4, [], { extra: 1 }, { max_bytes: -1 }, { max_bytes: 1.5 }, { max_bytes: 16_777_217 }];
+  const invalidProfiles = [null, 4, [], { extra: true }, { algorithms: [] }, { algorithms: ["unknown"] }, { algorithms: ["Ed25519", "Ed25519"] }, { revisions: { min: 3, max: 2 } }];
+  for (const { kind, call } of signingCalls(handle)) {
+    for (const limits of invalidLimits) {
+      assert.deepEqual(await call({ limits, profile: null, algorithm: "unknown" } as never),
+        { ok: false, error: "invalid_input", code: "invalid_limits" }, kind);
+    }
+    for (const profile of invalidProfiles) {
+      assert.deepEqual(await call({ limits: {}, profile, algorithm: "unknown" } as never),
+        { ok: false, error: "invalid_input", code: "invalid_profile" }, kind);
+    }
+    assert.equal(counts.identities, 0, kind);
+    assert.equal(counts.signs, 0, kind);
+  }
+});
+
+test("valid limits and profiles are accepted and predecessor is descriptor-only", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const { kind, call } of signingCalls(handle)) {
+    const result = await call({ limits: {}, profile: { algorithms: ["Ed25519"], revisions: { min: 2, max: 2 } } } as never);
+    assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+    const before = { ...counts };
+    const withPrevious = await call({ predecessor: null } as never);
+    if (kind === "descriptor") {
+      assert.ok(withPrevious.ok, JSON.stringify(withPrevious));
+    } else {
+      assert.deepEqual(withPrevious, { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
+      assert.deepEqual(counts, before, kind);
+    }
+  }
+});

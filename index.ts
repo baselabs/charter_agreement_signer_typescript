@@ -15,6 +15,8 @@ export {
   type KeyHandle,
   type KeySnapshot,
   type ChainView,
+  type SigningOptions,
+  type DescriptorOptions,
   type SignError,
   type SignResult,
 } from "./signer.ts";
