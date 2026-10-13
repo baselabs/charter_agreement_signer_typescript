@@ -1,10 +1,7 @@
 // CAP never authorizes.
 //
-// Signer tests: raw test key handles (Ed25519 from deterministic seeds)
-// exercise the full custody path per artifact kind —
-// snapshot → producer (provisional framing + refusals) → sign → wrong-key
-// guard → assemble → post-sign verify through the verifier package. These
-// tests verify through the published TypeScript verifier.
+// Real key handles exercise preparation, signing, the wrong-key guard,
+// and completion through the verifier package.
 import assert from "node:assert/strict";
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from "node:crypto";
 import { before, test } from "node:test";
@@ -76,7 +73,7 @@ function receiptClaims(): Record<string, unknown> {
 }
 
 function signingCalls(handle: unknown) {
-  const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView };
+  const view = world.genesisView;
   const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
   const descriptorClaims = {
     protocol_revision: 2,
@@ -155,15 +152,13 @@ test("acceptance and termination retain entry views across both key callbacks", 
   for (const kind of ["acceptance", "termination"] as const) {
     for (const mutateAt of ["identity", "sign"] as const) {
       const chain = copyChain(world.genesisView);
-      const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain };
+      const view = chain;
       const keys = ed25519FromSeed(Buffer.alloc(32, 11));
       const mutate = () => {
         chain.acceptances.length = 0;
         chain.revisions.length = 0;
         chain.descriptors.length = 0;
         chain.terminations.push("invalid artifact text");
-        view.descriptorCompacts.length = 0;
-        view.revisionText = "invalid revision text";
       };
       const handle: KeyHandle = {
         keyIdentity() {
@@ -252,7 +247,7 @@ test("malformed key snapshots return invalid_key_handle on every signing entry p
   const expected = { ok: false, error: "invalid_key_handle" };
   assert.deepEqual(await signDescriptor({}, handle), expected);
   assert.deepEqual(await signReceipt({}, handle, world.genesisView), expected);
-  const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView };
+  const view = world.genesisView;
   assert.deepEqual(await signAcceptance({}, handle, view), expected);
   assert.deepEqual(await signTermination({}, handle, view), expected);
   assert.equal(signs, 0);
@@ -352,13 +347,14 @@ test("unknown option keys, non-plain option objects and throwing option getters 
 
 test("a handle that is not an object, or whose keyIdentity throws, is invalid_key_handle before signing", async () => {
   let signs = 0;
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   const throwing = {
     keyIdentity() {
       throw new Error("custody unavailable");
     },
-    sign() {
+    sign(message: Uint8Array) {
       signs += 1;
-      return new Uint8Array(64);
+      return nodeSign(null, message, keys.privateKey);
     },
   };
   for (const handle of [undefined, null, 7, "handle", throwing]) {
@@ -372,7 +368,7 @@ test("a handle that is not an object, or whose keyIdentity throws, is invalid_ke
 test("claims changed by a key callback after entry do not change what is signed, for every kind and for Proxy claims", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   const publicKey = derivedPublic(keys.privateKey);
-  const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView };
+  const view = world.genesisView;
   const kinds: Array<{ kind: string; claims: () => Record<string, any>; field: string; changed: unknown; call: (claims: Record<string, unknown>, handle: KeyHandle) => Promise<any> }> = [
     {
       kind: "descriptor",
@@ -542,14 +538,14 @@ test("signReceipt rejects a missing or chain-invalid issuing view before the key
   const missing = await signReceipt(claims, counted.handle, null as never);
   assert.ok(!missing.ok);
   assert.equal((missing as { error: string }).error, "invalid_input");
-  assert.equal((missing as { code?: string }).code, "signing_input_invalid");
+  assert.equal((missing as { code?: string }).code, "invalid_type");
   assert.equal(counted.touches(), 0);
 
   const broken: ChainView = { ...world.genesisView, acceptances: ["not-a-compact-jws"] };
   const invalid = await signReceipt(claims, counted.handle, broken);
   assert.ok(!invalid.ok);
   assert.equal((invalid as { error: string }).error, "invalid_input");
-  assert.equal((invalid as { code?: string }).code, "chain_invalid");
+  assert.equal((invalid as { code?: string }).code, "compact_invalid");
   assert.equal(counted.touches(), 0);
 });
 
@@ -716,13 +712,8 @@ before(async () => {
     chain: ChainView,
     claims: Record<string, unknown>,
     party: Party,
-    textForVerify: string,
   ) => {
-    const result = await signAcceptance(claims, party.handle, {
-      revisionText: textForVerify,
-      descriptorCompacts: [party.descriptor],
-      chain,
-    });
+    const result = await signAcceptance(claims, party.handle, chain);
     if (!result.ok) throw new Error("fixture acceptance failed: " + JSON.stringify(result));
     return result.result.acceptance;
   };
@@ -731,31 +722,31 @@ before(async () => {
   const genesisAcceptorClaims = acceptanceClaims(genesisDigest, 1, "acceptor", acceptorPdd);
 
   // Bootstrap: the first acceptance into an empty-acceptance view is clean.
-  const gIssuer = await acceptInto(view([genesisText], []), genesisIssuerClaims, world.issuer, genesisText);
-  const gAcceptor = await acceptInto(view([genesisText], [gIssuer]), genesisAcceptorClaims, world.acceptor, genesisText);
+  const gIssuer = await acceptInto(view([genesisText], []), genesisIssuerClaims, world.issuer);
+  const gAcceptor = await acceptInto(view([genesisText], [gIssuer]), genesisAcceptorClaims, world.acceptor);
   const genesisView = view([genesisText], [gIssuer, gAcceptor]);
 
   const sIssuer = await acceptInto(
     view([genesisText, successorFinal], [gIssuer, gAcceptor]),
     acceptanceClaims(successorDigest, 2, "issuer", issuerPdd),
-    world.issuer, successorFinal,
+    world.issuer,
   );
   const sAcceptor = await acceptInto(
     view([genesisText, successorFinal], [gIssuer, gAcceptor, sIssuer]),
     acceptanceClaims(successorDigest, 2, "acceptor", acceptorPdd),
-    world.acceptor, successorFinal,
+    world.acceptor,
   );
   const advancedView = view([genesisText, successorFinal], [gIssuer, gAcceptor, sIssuer, sAcceptor]);
 
   const rIssuer = await acceptInto(
     view([genesisText, rightFinal], [gIssuer, gAcceptor]),
     acceptanceClaims(rightDigest, 2, "issuer", issuerPdd),
-    world.issuer, rightFinal,
+    world.issuer,
   );
   const rAcceptor = await acceptInto(
     view([genesisText, rightFinal], [gIssuer, gAcceptor, rIssuer]),
     acceptanceClaims(rightDigest, 2, "acceptor", acceptorPdd),
-    world.acceptor, rightFinal,
+    world.acceptor,
   );
   const forkView = view([genesisText, leftFinal, rightFinal], [gIssuer, gAcceptor, rIssuer, rAcceptor]);
 
@@ -789,7 +780,7 @@ test("signAcceptance: R1 false revision coordinates are refused before the key i
   const result = await signAcceptance(
     { ...world.genesisIssuerClaims, revision_digest: digestOf("different revision bytes") },
     counted.handle,
-    { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView },
+    world.genesisView,
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
@@ -804,11 +795,7 @@ test("signAcceptance: R2 equivocation at an occupied revision number is refused"
     revision_digest: world.leftDigest,
     revision_number: 2,
   };
-  const result = await signAcceptance(claims, counted.handle, {
-    revisionText: world.leftText,
-    descriptorCompacts: [world.issuer.descriptor],
-    chain: world.forkView,
-  });
+  const result = await signAcceptance(claims, counted.handle, world.forkView);
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
   assert.equal(counted.touches(), 0);
@@ -816,11 +803,7 @@ test("signAcceptance: R2 equivocation at an occupied revision number is refused"
 
 test("signAcceptance: R3 re-accepting a non-head revision is refused (uncovered head)", async () => {
   const counted = countingHandle();
-  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, {
-    revisionText: world.genesisText,
-    descriptorCompacts: [world.issuer.descriptor],
-    chain: world.forkView,
-  });
+  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, world.forkView);
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
   assert.equal(counted.touches(), 0);
@@ -840,7 +823,7 @@ test("signTermination: an unlisted reason is refused before the key is used", as
       effective_at: "2026-08-25T15:00:00Z",
     },
     counted.handle,
-    { revisionText: world.successorText, descriptorCompacts: [world.issuer.descriptor], chain: world.advancedView },
+    world.advancedView,
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
@@ -861,7 +844,7 @@ test("signTermination: a stale termination (non-governing revision) is refused",
       effective_at: "2026-08-25T15:00:00Z",
     },
     counted.handle,
-    { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.advancedView },
+    world.advancedView,
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
@@ -870,10 +853,7 @@ test("signTermination: a stale termination (non-governing revision) is refused",
 
 test("a malformed caller view is invalid input, not a refusal", async () => {
   const counted = countingHandle();
-  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, {
-    revisionText: world.genesisText,
-    descriptorCompacts: [world.issuer.descriptor],
-    chain: { ...world.genesisView, acceptances: ["not-a-compact-jws"] },
+  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, { ...world.genesisView, acceptances: ["not-a-compact-jws"],
   });
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "invalid_input");
@@ -895,7 +875,7 @@ test("signTermination: happy path over the governing successor, post-verified", 
       effective_at: "2026-08-25T15:00:00Z",
     },
     handle,
-    { revisionText: world.successorText, descriptorCompacts: [world.issuer.descriptor], chain: world.advancedView },
+    world.advancedView,
   );
   assert.ok(result.ok, JSON.stringify(result));
   const verified = verifyTermination(result.result.termination, world.successorText, [world.issuer.descriptor]);
@@ -910,11 +890,7 @@ test("signAcceptance: happy path re-accepting the governing successor, post-veri
     revision_digest: world.successorDigest,
     revision_number: 2,
   };
-  const result = await signAcceptance(claims, handle, {
-    revisionText: world.successorText,
-    descriptorCompacts: [world.issuer.descriptor],
-    chain: world.advancedView,
-  });
+  const result = await signAcceptance(claims, handle, world.advancedView);
   assert.ok(result.ok, JSON.stringify(result));
   const verified = verifyAcceptance(result.result.acceptance, world.successorText, [world.issuer.descriptor]);
   assert.ok(verified.ok, JSON.stringify(verified));
@@ -939,7 +915,7 @@ test("a 0.1.x-shaped termination view (no chain) fails closed, never throws", as
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "invalid_input");
-  assert.equal((result as { code?: string }).code, "signing_input_invalid");
+  assert.equal((result as { code?: string }).code, "invalid_type");
   assert.equal(counted.touches(), 0);
 });
 
@@ -976,7 +952,7 @@ test("malformed claims are rejected before the key is used (the producer claims 
   const acceptance = await signAcceptance(
     { ...world.genesisIssuerClaims, revision_number: 2 } as Record<string, unknown>,
     counted.handle,
-    { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView },
+    world.genesisView,
   );
   assert.ok(!acceptance.ok);
   assert.equal((acceptance as { error: string }).error, "invalid_input");
@@ -1010,25 +986,15 @@ test("malformed claims are rejected before the key is used (the producer claims 
   assert.equal(counted.touches(), 0);
 });
 
-test("a post-sign verification failure is its own discipline: verification_failed", async () => {
-  // The snapshot key verifies its own signature (the wrong-key guard
-  // passes), but the key is not in the party descriptor's verification_keys:
-  // the assembled artifact cannot verify - the reference's canonical
-  // verification_failed example.
-  const { handle } = rawKeyHandle(Buffer.alloc(32, 99), "not-in-descriptor");
-  const result = await signAcceptance(world.genesisIssuerClaims, handle, {
-    revisionText: world.genesisText,
-    descriptorCompacts: [world.issuer.descriptor],
-    chain: world.genesisView,
-  });
+test("a key absent from the holder's descriptor is refused before signing", async () => {
+  const { handle, counts } = callbackCounts(99, "not-in-descriptor");
+  const result = await signAcceptance(world.genesisIssuerClaims, handle, world.genesisView);
   assert.ok(!result.ok);
-  assert.equal((result as { error: string }).error, "verification_failed");
+  assert.deepEqual(result, { ok: false, error: "refused", code: "signing_key_mismatch" });
+  assert.equal(counts.signs, 0);
 });
 
-test("view-shape defects outrank claims defects (the reference function head)", async () => {
-  // The reference producer's function head rejects a malformed set before
-  // build: a missing view object wins over a claims defect. Both land in
-  // invalid_input; this pins WHICH code.
+test("context type checks precede claims checks", async () => {
   const counted = countingHandle();
   const claimsBadAndViewMissing = await signAcceptance(
     { ...world.genesisIssuerClaims, revision_number: 2 } as Record<string, unknown>,
@@ -1036,7 +1002,7 @@ test("view-shape defects outrank claims defects (the reference function head)", 
     undefined as never,
   );
   assert.ok(!claimsBadAndViewMissing.ok);
-  assert.equal((claimsBadAndViewMissing as { code?: string }).code, "signing_input_invalid");
+  assert.equal((claimsBadAndViewMissing as { code?: string }).code, "invalid_type");
   assert.equal(counted.touches(), 0);
 });
 
@@ -1072,4 +1038,143 @@ test("valid limits and profiles are accepted and predecessor is descriptor-only"
       assert.deepEqual(counts, before, kind);
     }
   }
+});
+
+test("the holder's own descriptor key must match the kid and bytes before signing", async () => {
+  for (const [seed, kid] of [[11, "wrong-kid"], [99, "not-in-descriptor"], [99, "issuer-key-001"], [12, "acceptor-key-001"]] as const) {
+    const { handle, counts } = callbackCounts(seed, kid);
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call({}), { ok: false, error: "refused", code: "signing_key_mismatch" }, `${kind}/${kid}/${seed}`);
+      assert.equal(counts.signs, 0, kind);
+    }
+  }
+});
+
+test("receipt claims must match their context before signing", async () => {
+  for (const patch of [
+    { deployment_digest: digestOf("other deployment") },
+    { revision_number: 2 },
+    { charter_id: digestOf("other charter") },
+  ]) {
+    const { handle, counts } = callbackCounts(11, "issuer-key-001");
+    assert.deepEqual(await signReceipt({ ...receiptClaims(), ...patch }, handle, world.genesisView),
+      { ok: false, error: "invalid_input", code: "receipt_claims_mismatch" });
+    assert.equal(counts.signs, 0);
+  }
+});
+
+test("profiles exclude the artifact before signing for every kind", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const profile of [{ algorithms: ["ML-DSA-65"] }, { algorithms: ["EdDSA"] }, { algorithms: ["ML-DSA-44", "ML-DSA-87"] }, { revisions: { min: 1, max: 1 } }]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      const result = await call({ profile });
+      assert.deepEqual(result, { ok: false, error: "invalid_input", code: "algorithms" in profile ? "algorithm_outside_profile" : "revision_outside_profile" }, kind);
+      assert.equal(counts.signs, 0, kind);
+    }
+  }
+});
+
+function generatedHandle(algorithm: "Ed25519" | "ML-DSA-65", kid: string) {
+  const keys = algorithm === "Ed25519" ? generateKeyPairSync("ed25519") : generateKeyPairSync("ml-dsa-65");
+  const publicKey = keys.publicKey.export({ type: "spki", format: "der" }).subarray(algorithm === "Ed25519" ? -32 : -1952).toString("base64url");
+  const counts = { signs: 0 };
+  const handle: KeyHandle = {
+    keyIdentity: () => ({ kid, publicKey }),
+    sign(message) {
+      counts.signs += 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  return { handle, publicKey, counts };
+}
+
+function genesisClaims(algorithm: "Ed25519" | "ML-DSA-65", kid: string, publicKey: string) {
+  return {
+    protocol_revision: algorithm === "Ed25519" ? 2 : 3,
+    descriptor_number: 1,
+    verification_keys: [{ key_id: kid, algorithm, public_key: publicKey, status: "active" }],
+    attestation_hints: [],
+    extensions: { critical: {}, optional: {} },
+    effective_from: "2026-08-25T10:00:00Z",
+  };
+}
+
+test("profiles exclude context revisions and descriptor algorithms before signing", async () => {
+  for (const profile of [{ algorithms: ["ML-DSA-65"] }, { revisions: { min: 3, max: 3 } }]) {
+    const fixture = generatedHandle("ML-DSA-65", "issuer-key-001");
+    const opts = { algorithm: "ML-DSA-65", profile };
+    const expected = { ok: false, error: "invalid_input", code: "algorithms" in profile ? "algorithm_outside_profile" : "revision_outside_profile" };
+    assert.deepEqual(await signAcceptance({ ...world.genesisIssuerClaims, protocol_revision: 3 }, fixture.handle, world.genesisView, opts), expected);
+    assert.equal(fixture.counts.signs, 0);
+    assert.deepEqual(await signReceipt({ ...receiptClaims(), protocol_revision: 3 }, fixture.handle, world.genesisView, opts), expected);
+    assert.equal(fixture.counts.signs, 0);
+  }
+});
+
+test("limits include the final signature bytes and allow exactly the compact size", async () => {
+  for (const algorithm of ["Ed25519", "ML-DSA-65"] as const) {
+    const fixture = generatedHandle(algorithm, "size-key");
+    const claims = genesisClaims(algorithm, "size-key", fixture.publicKey);
+    const original = await signDescriptor(claims, fixture.handle, { algorithm });
+    assert.ok(original.ok, JSON.stringify(original));
+    const size = Buffer.byteLength(original.result.descriptor);
+    const before = fixture.counts.signs;
+    assert.deepEqual(await signDescriptor(claims, fixture.handle, { algorithm, limits: { max_bytes: size - 1 } }),
+      { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+    assert.equal(fixture.counts.signs, before);
+    const exact = await signDescriptor(claims, fixture.handle, { algorithm, limits: { max_bytes: size } });
+    assert.ok(exact.ok, JSON.stringify(exact));
+    assert.equal(Buffer.byteLength(exact.result.descriptor), size);
+    if (algorithm === "Ed25519") assert.equal(exact.result.descriptor, original.result.descriptor);
+  }
+});
+
+test("receipts can use a bare revision text with a real unnamed key", async () => {
+  const { handle, counts } = callbackCounts(99, "receipt-key");
+  const result = await signReceipt(receiptClaims(), handle, world.genesisText);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.equal(counts.signs, 1);
+  assert.ok(verifyReceipt(result.result.receipt, world.genesisText).ok);
+});
+
+test("successor descriptors use the retained predecessor for both algorithms", async () => {
+  for (const algorithm of ["Ed25519", "ML-DSA-65"] as const) {
+    const previousKey = generatedHandle(algorithm, "previous-key");
+    const nextKey = generatedHandle(algorithm, "next-key");
+    const root = await signDescriptor(genesisClaims(algorithm, "previous-key", previousKey.publicKey), previousKey.handle, { algorithm });
+    assert.ok(root.ok, JSON.stringify(root));
+    const verified = verifyDescriptor(root.result.descriptor);
+    assert.ok(verified.ok, JSON.stringify(verified));
+    const successor = {
+      ...genesisClaims(algorithm, "next-key", nextKey.publicKey),
+      descriptor_number: 2,
+      party_id: verified.facts.party_id,
+      prev_descriptor_digest: verified.facts.descriptor_digest,
+      effective_from: "2026-08-25T11:00:00Z",
+    };
+    const before = previousKey.counts.signs;
+    for (const predecessor of [undefined, { ...verified.facts, descriptor_digest: digestOf("other descriptor") }, { lineage: [42] }]) {
+      assert.deepEqual(await signDescriptor(successor, previousKey.handle, { algorithm, predecessor } as never),
+        { ok: false, error: "invalid_input", code: "descriptor_chain_invalid" });
+      assert.equal(previousKey.counts.signs, before);
+    }
+    assert.deepEqual(await signDescriptor(successor, nextKey.handle, { algorithm, predecessor: verified.facts }),
+      { ok: false, error: "refused", code: "signing_key_mismatch" });
+    assert.equal(nextKey.counts.signs, 0);
+    const result = await signDescriptor(successor, previousKey.handle, { algorithm, predecessor: verified.facts });
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.ok(verifyDescriptor(result.result.descriptor, verified.facts).ok);
+  }
+});
+
+test("key encoding checks follow context type and claims checks", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity: () => ({ kid: "issuer-key-001", publicKey: "" }),
+    sign(message) { signs += 1; return nodeSign(null, message, keys.privateKey); },
+  };
+  assert.deepEqual(await signDescriptor({}, handle), { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+  assert.deepEqual(await signReceipt({}, handle, null as never), { ok: false, error: "invalid_input", code: "invalid_type" });
+  assert.equal(signs, 0);
 });

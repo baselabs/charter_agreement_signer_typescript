@@ -85,15 +85,15 @@ test("browser shim mints and verifies an Ed25519 genesis descriptor", async () =
   assert.ok(browser.verifyDescriptor(result.result.descriptor).ok);
 });
 
-test("on the browser shim, which cannot verify ML-DSA-65, signing fails after the key and the verifier reports the substrate", async () => {
+test("the browser shim refuses ML-DSA-65 before signing and reports the substrate", async () => {
   const fixture = genesis("ML-DSA-65");
   const native = await signDescriptor(fixture.claims, fixture.handle, { algorithm: "ML-DSA-65" });
   assert.ok(native.ok, JSON.stringify(native));
   assert.deepEqual(browser.verifyDescriptor(native.result.descriptor),
     { ok: false, code: "algorithm_unsupported_on_substrate" });
   const result = await browser.signDescriptor(fixture.claims, fixture.handle, { algorithm: "ML-DSA-65" });
-  assert.deepEqual(result, { ok: false, error: "signing_failed" });
-  assert.equal(fixture.signs(), 2);
+  assert.deepEqual(result, { ok: false, error: "algorithm_unsupported_on_substrate" });
+  assert.equal(fixture.signs(), 1);
 });
 
 test("the workshop flow, bundled with the site's browser shims, forms, accepts, signs a receipt and verifies", async () => {
