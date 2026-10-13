@@ -15,6 +15,7 @@ import {
 } from "./signer.ts";
 import {
   canonical,
+  revisionDigest,
   verifyAcceptance,
   verifyChain,
   verifyDescriptor,
@@ -1190,4 +1191,114 @@ test("invalid limits precede a throwing profile getter", async () => {
     assert.equal(counts.identities, 0, kind);
     assert.equal(counts.signs, 0, kind);
   }
+});
+
+test("malformed contexts return verifier codes without signing", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const termination = {
+    protocol_revision: 2, charter_id: world.genesisDigest,
+    governing_revision_digest: world.genesisDigest, party_descriptor_digest: world.issuer.pdd,
+    party_role: "issuer", reason_code: "mutual", issued_at: "2026-08-25T14:00:00Z", effective_at: "2026-08-25T15:00:00Z",
+  };
+  for (const context of [null, undefined, 42, [], ["x"], {},
+    ...(["revisions", "acceptances", "descriptors", "terminations"] as const).flatMap((field) =>
+      [null, "x", [42]].map((value) => ({ ...world.genesisView, [field]: value })))]) {
+    const calls = [
+      () => signAcceptance(world.genesisIssuerClaims, handle, context as never),
+      () => signTermination(termination, handle, context as never),
+      () => signReceipt(receiptClaims(), handle, context as never),
+    ];
+    for (const call of calls) {
+      assert.deepEqual(await call(), { ok: false, error: "invalid_input", code: "invalid_type" });
+      assert.equal(counts.signs, 0);
+    }
+  }
+  for (const predecessor of [42, [], { lineage: null }, { lineage: [42] }]) {
+    const snapshot = await handle.keyIdentity(handle);
+    const result = await signDescriptor(genesisClaims("Ed25519", snapshot.kid, snapshot.publicKey), handle, { predecessor } as never);
+    assert.deepEqual(result, { ok: false, error: "invalid_input", code: typeof predecessor === "number" || Array.isArray(predecessor) ? "invalid_type" : "descriptor_chain_invalid" });
+    assert.equal(counts.signs, 0);
+  }
+});
+
+test("an unheld successor descriptor returns claims mismatch before signing", async () => {
+  const root = verifyDescriptor(world.issuer.descriptor);
+  assert.ok(root.ok);
+  const snapshot = await (world.issuer.handle as KeyHandle).keyIdentity(world.issuer.handle);
+  const successor = await signDescriptor({
+    ...genesisClaims("Ed25519", snapshot.kid, snapshot.publicKey),
+    descriptor_number: 2, party_id: root.facts.party_id,
+    prev_descriptor_digest: root.facts.descriptor_digest, effective_from: "2026-08-25T11:00:00Z",
+  }, world.issuer.handle, { predecessor: root.facts });
+  assert.ok(successor.ok, JSON.stringify(successor));
+  const next = verifyDescriptor(successor.result.descriptor, root.facts);
+  assert.ok(next.ok);
+  const revision = canonical({
+    ...JSON.parse(world.genesisText),
+    charter_id: world.genesisDigest, prev_revision_digest: world.genesisDigest, revision_number: 2,
+    effective_from: "2026-08-25T12:00:01Z",
+    parties: [{ party_descriptor_digest: next.facts.descriptor_digest, role: "issuer" }, { party_descriptor_digest: world.acceptor.pdd, role: "acceptor" }],
+  });
+  const chain = { ...copyChain(world.genesisView), revisions: [world.genesisText, revision] };
+  assert.ok(verifyChain(chain).ok);
+  const digested = revisionDigest(revision);
+  assert.ok(digested.ok);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  assert.deepEqual(await signAcceptance({
+    ...world.genesisIssuerClaims, revision_number: 2, prev_revision_digest: world.genesisDigest,
+    revision_digest: digested.digest, party_descriptor_digest: next.facts.descriptor_digest,
+  }, handle, chain), { ok: false, error: "invalid_input", code: "acceptance_claims_mismatch" });
+  assert.equal(counts.signs, 0);
+
+});
+
+test("entry copies retain limits, profiles and predecessor lineage across callbacks", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const publicKey = derivedPublic(keys.privateKey);
+  const root = verifyDescriptor(world.issuer.descriptor);
+  assert.ok(root.ok);
+  const successor = {
+    ...genesisClaims("Ed25519", "issuer-key-001", publicKey),
+    descriptor_number: 2, party_id: root.facts.party_id, prev_descriptor_digest: root.facts.descriptor_digest,
+    effective_from: "2026-08-25T11:00:00Z",
+  };
+  for (const mutateAt of ["identity", "sign"] as const) {
+    const opts = { predecessor: structuredClone(root.facts), limits: { max_bytes: 4096 }, profile: { algorithms: ["Ed25519"], revisions: { min: 2, max: 2 } } };
+    const mutate = () => {
+      (opts.predecessor.lineage as string[]).length = 0;
+      opts.limits.max_bytes = 0;
+      opts.profile.algorithms[0] = "ML-DSA-65";
+      opts.profile.revisions.min = opts.profile.revisions.max = 3;
+    };
+    const handle: KeyHandle = {
+      async keyIdentity() {
+        if (mutateAt === "identity") mutate();
+        return { kid: "issuer-key-001", publicKey };
+      },
+      sign(message) {
+        if (mutateAt === "sign") mutate();
+        return nodeSign(null, message, keys.privateKey);
+      },
+    };
+    const result = await signDescriptor(successor, handle, opts);
+    assert.ok(result.ok, `${mutateAt}: ${JSON.stringify(result)}`);
+    assert.ok(verifyDescriptor(result.result.descriptor, root.facts).ok);
+  }
+});
+
+test("raised limits prepare and finish a receipt larger than the default compact limit", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const claims = { ...receiptClaims(), extensions: { critical: {}, optional: { "com.example/text": "x".repeat(800_000) } } };
+  assert.deepEqual(await signReceipt(claims, handle, world.genesisView), { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+  assert.equal(counts.signs, 0);
+  const opts = { limits: { max_bytes: 2_097_152, max_string_bytes: 1_048_576 } };
+  const result = await signReceipt(claims, handle, world.genesisView, opts);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.equal(counts.signs, 1);
+  assert.ok(Buffer.byteLength(result.result.receipt) > 1_048_576);
+  assert.ok(verifyReceipt(result.result.receipt, world.genesisView, opts).ok);
+  const before = counts.signs;
+  assert.deepEqual(await signReceipt(claims, handle, world.genesisView, { limits: { ...opts.limits, max_bytes: Buffer.byteLength(result.result.receipt) - 1 } }),
+    { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+  assert.equal(counts.signs, before);
 });

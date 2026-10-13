@@ -204,7 +204,10 @@ async function signPrepared(
   if (!(signature instanceof Uint8Array) || !row || signature.length !== row.signatureBytes) {
     return { error: "signing_failed" };
   }
-  if (!verifySignature(input.message, Buffer.from(signature), snapshot.publicKey, input.alg)) {
+  if (!verifySignature(input.message, Buffer.from(signature), snapshot.publicKey, input.alg, {
+    limits: options.limits,
+    profile: options.profile,
+  })) {
     return { error: "signing_failed" };
   }
   const finished = finishSigning(prepared.plan, signature);
