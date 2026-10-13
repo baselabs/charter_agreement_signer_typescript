@@ -3,6 +3,36 @@
 All notable public changes to `@charter-agreement-protocol/signer` are
 documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Use `@charter-agreement-protocol/verifier` `^0.6.0` (locked to 0.6.0).
+  Fixtures hash real bytes, use canonical revision JSON, and count real
+  Ed25519 signing calls.
+
+### Migration from verifier 0.5 to 0.6
+
+- Producer build failures now surface as `invalid_input` with
+  `code: "signing_input_invalid"`, replacing schema-specific codes.
+  Termination claims must omit `extensions` and other extra members.
+- Digests must be canonical base64url SHA-256 values. Revision text must
+  be canonical JSON, and each revision must name two distinct parties.
+  Descriptor public keys must use canonical encodings and the correct
+  byte length. Mixed party histories and unknown claims now reject.
+- Chain views require all four string arrays, including explicit empty
+  arrays. Malformed artifact lists return `invalid_type` through the
+  verifier's producers. The signer's missing-view guard continues to
+  return `signing_input_invalid`.
+- Direct verifier callers must pass verified predecessor facts with
+  retained signed `lineage` to `verifyDescriptor`; `{ digest, claims }`
+  alone no longer works. Genesis calls must omit a predecessor.
+- Direct verification can now apply limits and profiles to context as
+  well as the artifact, and unavailable crypto reports
+  `algorithm_unsupported_on_substrate`. This signer's current options
+  expose only the emission algorithm; its custody guard still maps a
+  failed signature check to `signing_failed`.
+
 ## [0.2.2] — October 6, 2026
 
 ### Changed

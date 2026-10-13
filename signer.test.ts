@@ -7,7 +7,7 @@
 // Elixir-repo gate separately proves these TS-signed artifacts verify under
 // the Elixir reference implementation.
 import assert from "node:assert/strict";
-import { createPrivateKey, createPublicKey, sign as nodeSign } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, sign as nodeSign } from "node:crypto";
 import { before, test } from "node:test";
 import {
   signAcceptance,
@@ -18,6 +18,7 @@ import {
   type KeyHandle,
 } from "./signer.ts";
 import {
+  canonical,
   verifyAcceptance,
   verifyChain,
   verifyDescriptor,
@@ -35,7 +36,6 @@ function ed25519FromSeed(seed: Buffer) {
 
 function rawKeyHandle(seed: Buffer, kid: string): { handle: unknown } {
   const keys = ed25519FromSeed(seed);
-  const context = { kid, keys };
   const handle: KeyHandle = {
     keyIdentity(_h: unknown) {
       // The snapshot's public key is the SEED-derived public key; derive it
@@ -53,6 +53,10 @@ function rawKeyHandle(seed: Buffer, kid: string): { handle: unknown } {
 function derivedPublic(privateKey: ReturnType<typeof createPrivateKey>): string {
   const spki = createPublicKey(privateKey).export({ format: "der", type: "spki" }) as Buffer;
   return Buffer.from(spki.subarray(spki.length - 32)).toString("base64url");
+}
+
+function digestOf(text: string): string {
+  return "sha-256:" + createHash("sha256").update(text).digest("base64url");
 }
 
 test("signDescriptor: full custody path, post-verified at revision 2", async () => {
@@ -131,7 +135,7 @@ test("signReceipt rejects a missing or chain-invalid issuing view before the key
   // Well-formed claims: the ONLY rejection path is the view gate, so this
   // goes red if the gate is removed (empty claims would be rejected by
   // framing regardless, proving nothing about the gate).
-  const spy = spyHandle();
+  const counted = countingHandle();
   const claims = {
     protocol_revision: 2,
     charter_id: world.genesisDigest,
@@ -140,7 +144,7 @@ test("signReceipt rejects a missing or chain-invalid issuing view before the key
     issuing_party_role: "issuer",
     agent_party_role: "acceptor",
     deployment_digest: world.deploymentDigest,
-    grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "E".repeat(43) },
+    grant: { scheme: "bap", id: "grant-001", grant_digest: digestOf("example receipt reference bytes") },
     invocation_id: "inv-001",
     decision: "accepted",
     outcome: "effect_committed",
@@ -148,26 +152,26 @@ test("signReceipt rejects a missing or chain-invalid issuing view before the key
     recorded_at: "2026-08-25T13:30:01Z",
     extensions: { critical: {}, optional: {} },
   };
-  const missing = await signReceipt(claims, spy.handle, null as never);
+  const missing = await signReceipt(claims, counted.handle, null as never);
   assert.ok(!missing.ok);
   assert.equal((missing as { error: string }).error, "invalid_input");
   assert.equal((missing as { code?: string }).code, "signing_input_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 
   const broken: ChainView = { ...world.genesisView, acceptances: ["not-a-compact-jws"] };
-  const invalid = await signReceipt(claims, spy.handle, broken);
+  const invalid = await signReceipt(claims, counted.handle, broken);
   assert.ok(!invalid.ok);
   assert.equal((invalid as { error: string }).error, "invalid_input");
   assert.equal((invalid as { code?: string }).code, "chain_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("a missing view object is the closed invalid_input, never a throw", async () => {
-  const spy = spyHandle();
-  const acceptance = await signAcceptance(world.genesisIssuerClaims, spy.handle, undefined as never);
+  const counted = countingHandle();
+  const acceptance = await signAcceptance(world.genesisIssuerClaims, counted.handle, undefined as never);
   assert.ok(!acceptance.ok);
   assert.equal((acceptance as { error: string }).error, "invalid_input");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -178,7 +182,7 @@ test("a missing view object is the closed invalid_input, never a throw", async (
 // the first acceptance), a successor revision, and a forked variant for
 // the equivocation refusal. Revision digests come from the verifier's own
 // chain facts over the fixture texts — never re-derived here. Refusal
-// cases run with a spy handle whose sign() must never be reached.
+// cases count real signing calls, which must remain at zero.
 // ---------------------------------------------------------------------------
 
 
@@ -245,13 +249,13 @@ before(async () => {
   const issuerPdd = issuerVerified.facts.descriptor_digest as string;
   const acceptorPdd = acceptorVerified.facts.descriptor_digest as string;
 
-  const deploymentDigest = "sha-256:" + "Q".repeat(43);
+  const deploymentDigest = digestOf("example deployment bytes");
   const revisionText = (overrides: Record<string, unknown>) =>
-    JSON.stringify({
+    canonical({
       abp_bindings: [
         {
           blueprint_id: "example.demo/echo",
-          content_digest: "sha-256:" + "P".repeat(43),
+          content_digest: digestOf("example blueprint bytes"),
           deployment_digest: deploymentDigest,
           party_role: "acceptor",
           release_number: 1,
@@ -260,7 +264,7 @@ before(async () => {
       attribution_declaration: { basis: "bound_deployments" },
       effective_from: "2026-08-25T12:00:00Z",
       extensions: { critical: {}, optional: {} },
-      legal_text: { content_digest: "sha-256:" + "L".repeat(43), media_type: "text/plain" },
+      legal_text: { content_digest: digestOf("genesis legal text"), media_type: "text/plain" },
       parties: [
         { party_descriptor_digest: issuerPdd, role: "issuer" },
         { party_descriptor_digest: acceptorPdd, role: "acceptor" },
@@ -276,15 +280,15 @@ before(async () => {
   const genesisText = revisionText({});
   const successorText = revisionText({
     charter_id: "PENDING_GENESIS_DIGEST",
-    legal_text: { content_digest: "sha-256:" + "S".repeat(43), media_type: "text/plain" },
+    legal_text: { content_digest: digestOf("successor legal text"), media_type: "text/plain" },
     effective_from: "2026-08-25T12:00:01Z",
     prev_revision_digest: "PENDING_GENESIS_DIGEST",
     revision_number: 2,
   });
-  const forkText = (legalChar: string) =>
+  const forkText = (legalText: string) =>
     revisionText({
       charter_id: "PENDING_GENESIS_DIGEST",
-      legal_text: { content_digest: "sha-256:" + legalChar.repeat(43), media_type: "text/plain" },
+      legal_text: { content_digest: digestOf(legalText), media_type: "text/plain" },
       effective_from: "2026-08-25T12:00:01Z",
       prev_revision_digest: "PENDING_GENESIS_DIGEST",
       revision_number: 2,
@@ -379,64 +383,64 @@ before(async () => {
   });
 });
 
-// A spy handle: identity resolves, but sign() counts touches — refusal paths
-// must leave the count at zero.
-function spyHandle(): { handle: unknown; touches: () => number } {
+// Count real Ed25519 signing calls; refusal paths must leave the count at zero.
+function countingHandle(): { handle: unknown; touches: () => number } {
   let touches = 0;
+  const keys = ed25519FromSeed(Buffer.alloc(32, 7));
   const handle: KeyHandle = {
-    keyIdentity: () => ({ kid: "spy-key", publicKey: Buffer.alloc(32, 7).toString("base64url") }),
-    sign() {
+    keyIdentity: () => ({ kid: "counted-key", publicKey: derivedPublic(keys.privateKey) }),
+    sign(message) {
       touches += 1;
-      return new Uint8Array(64);
+      return nodeSign(null, message, keys.privateKey);
     },
   };
   return { handle, touches: () => touches };
 }
 
 test("signAcceptance: R1 false revision coordinates are refused before the key is used", async () => {
-  const spy = spyHandle();
+  const counted = countingHandle();
   const result = await signAcceptance(
-    { ...world.genesisIssuerClaims, revision_digest: "sha-256:" + "0".repeat(43) },
-    spy.handle,
+    { ...world.genesisIssuerClaims, revision_digest: digestOf("different revision bytes") },
+    counted.handle,
     { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView },
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("signAcceptance: R2 equivocation at an occupied revision number is refused", async () => {
-  const spy = spyHandle();
+  const counted = countingHandle();
   const claims = {
     ...world.genesisIssuerClaims,
     prev_revision_digest: world.genesisDigest,
     revision_digest: world.leftDigest,
     revision_number: 2,
   };
-  const result = await signAcceptance(claims, spy.handle, {
+  const result = await signAcceptance(claims, counted.handle, {
     revisionText: world.leftText,
     descriptorCompacts: [world.issuer.descriptor],
     chain: world.forkView,
   });
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("signAcceptance: R3 re-accepting a non-head revision is refused (uncovered head)", async () => {
-  const spy = spyHandle();
-  const result = await signAcceptance(world.genesisIssuerClaims, spy.handle, {
+  const counted = countingHandle();
+  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, {
     revisionText: world.genesisText,
     descriptorCompacts: [world.issuer.descriptor],
     chain: world.forkView,
   });
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("signTermination: an unlisted reason is refused before the key is used", async () => {
-  const spy = spyHandle();
+  const counted = countingHandle();
   const result = await signTermination(
     {
       protocol_revision: 2,
@@ -447,18 +451,17 @@ test("signTermination: an unlisted reason is refused before the key is used", as
       reason_code: "not-in-charter",
       issued_at: "2026-08-25T14:00:00Z",
       effective_at: "2026-08-25T15:00:00Z",
-      extensions: { critical: {}, optional: {} },
     },
-    spy.handle,
+    counted.handle,
     { revisionText: world.successorText, descriptorCompacts: [world.issuer.descriptor], chain: world.advancedView },
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("signTermination: a stale termination (non-governing revision) is refused", async () => {
-  const spy = spyHandle();
+  const counted = countingHandle();
   const result = await signTermination(
     {
       protocol_revision: 2,
@@ -469,19 +472,18 @@ test("signTermination: a stale termination (non-governing revision) is refused",
       reason_code: "mutual",
       issued_at: "2026-08-25T14:00:00Z",
       effective_at: "2026-08-25T15:00:00Z",
-      extensions: { critical: {}, optional: {} },
     },
-    spy.handle,
+    counted.handle,
     { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.advancedView },
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "refused");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("a malformed caller view is invalid input, not a refusal", async () => {
-  const spy = spyHandle();
-  const result = await signAcceptance(world.genesisIssuerClaims, spy.handle, {
+  const counted = countingHandle();
+  const result = await signAcceptance(world.genesisIssuerClaims, counted.handle, {
     revisionText: world.genesisText,
     descriptorCompacts: [world.issuer.descriptor],
     chain: { ...world.genesisView, acceptances: ["not-a-compact-jws"] },
@@ -489,7 +491,7 @@ test("a malformed caller view is invalid input, not a refusal", async () => {
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "invalid_input");
   assert.equal((result as { code?: string }).code, "chain_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("signTermination: happy path over the governing successor, post-verified", async () => {
@@ -504,7 +506,6 @@ test("signTermination: happy path over the governing successor, post-verified", 
       reason_code: "mutual",
       issued_at: "2026-08-25T14:00:00Z",
       effective_at: "2026-08-25T15:00:00Z",
-      extensions: { critical: {}, optional: {} },
     },
     handle,
     { revisionText: world.successorText, descriptorCompacts: [world.issuer.descriptor], chain: world.advancedView },
@@ -533,7 +534,7 @@ test("signAcceptance: happy path re-accepting the governing successor, post-veri
 });
 
 test("a 0.1.x-shaped termination view (no chain) fails closed, never throws", async () => {
-  const spy = spyHandle();
+  const counted = countingHandle();
   const result = await signTermination(
     {
       protocol_revision: 2,
@@ -544,16 +545,15 @@ test("a 0.1.x-shaped termination view (no chain) fails closed, never throws", as
       reason_code: "mutual",
       issued_at: "2026-08-25T14:00:00Z",
       effective_at: "2026-08-25T15:00:00Z",
-      extensions: { critical: {}, optional: {} },
     },
-    spy.handle,
+    counted.handle,
     // The pre-0.2.0 view shape: no chain member.
     { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor] } as never,
   );
   assert.ok(!result.ok);
   assert.equal((result as { error: string }).error, "invalid_input");
   assert.equal((result as { code?: string }).code, "signing_input_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
 
 test("signReceipt: bound context happy path, post-verified", async () => {
@@ -566,7 +566,7 @@ test("signReceipt: bound context happy path, post-verified", async () => {
     issuing_party_role: "issuer",
     agent_party_role: "acceptor",
     deployment_digest: world.deploymentDigest,
-    grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "E".repeat(43) },
+    grant: { scheme: "bap", id: "grant-001", grant_digest: digestOf("example receipt reference bytes") },
     invocation_id: "inv-001",
     decision: "accepted",
     outcome: "effect_committed",
@@ -584,19 +584,19 @@ test("signReceipt: bound context happy path, post-verified", async () => {
 });
 
 test("malformed claims are rejected before the key is used (the producer claims gate)", async () => {
-  const spy = spyHandle();
+  const counted = countingHandle();
   // Acceptance n>1 without a predecessor digest: a codec schema red.
   const acceptance = await signAcceptance(
     { ...world.genesisIssuerClaims, revision_number: 2 } as Record<string, unknown>,
-    spy.handle,
+    counted.handle,
     { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView },
   );
   assert.ok(!acceptance.ok);
   assert.equal((acceptance as { error: string }).error, "invalid_input");
-  assert.equal((acceptance as { code?: string }).code, "acceptance_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal((acceptance as { code?: string }).code, "signing_input_invalid");
+  assert.equal(counted.touches(), 0);
 
-  // Receipt decision/outcome matrix red: rejected requires no_effect.
+  // Rejected receipts require no_effect.
   const receipt = await signReceipt(
     {
       protocol_revision: 2,
@@ -606,7 +606,7 @@ test("malformed claims are rejected before the key is used (the producer claims 
       issuing_party_role: "issuer",
       agent_party_role: "acceptor",
       deployment_digest: world.deploymentDigest,
-      grant: { scheme: "bap", id: "grant-001", grant_digest: "sha-256:" + "E".repeat(43) },
+      grant: { scheme: "bap", id: "grant-001", grant_digest: digestOf("example receipt reference bytes") },
       invocation_id: "inv-001",
       decision: "rejected",
       outcome: "effect_committed",
@@ -614,13 +614,13 @@ test("malformed claims are rejected before the key is used (the producer claims 
       recorded_at: "2026-08-25T13:30:01Z",
       extensions: { critical: {}, optional: {} },
     },
-    spy.handle,
+    counted.handle,
     world.genesisView,
   );
   assert.ok(!receipt.ok);
   assert.equal((receipt as { error: string }).error, "invalid_input");
-  assert.equal((receipt as { code?: string }).code, "cross_field_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal((receipt as { code?: string }).code, "signing_input_invalid");
+  assert.equal(counted.touches(), 0);
 });
 
 test("a post-sign verification failure is its own discipline: verification_failed", async () => {
@@ -642,13 +642,13 @@ test("view-shape defects outrank claims defects (the reference function head)", 
   // The reference producer's function head rejects a malformed set before
   // build: a missing view object wins over a claims defect. Both land in
   // invalid_input; this pins WHICH code.
-  const spy = spyHandle();
+  const counted = countingHandle();
   const claimsBadAndViewMissing = await signAcceptance(
     { ...world.genesisIssuerClaims, revision_number: 2 } as Record<string, unknown>,
-    spy.handle,
+    counted.handle,
     undefined as never,
   );
   assert.ok(!claimsBadAndViewMissing.ok);
   assert.equal((claimsBadAndViewMissing as { code?: string }).code, "signing_input_invalid");
-  assert.equal(spy.touches(), 0);
+  assert.equal(counted.touches(), 0);
 });
