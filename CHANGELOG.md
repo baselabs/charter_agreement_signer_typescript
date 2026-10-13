@@ -28,6 +28,8 @@ documented here.
 
 ### Changed
 
+- SECURITY.md sends reports through GitHub private vulnerability reporting, now
+  enabled for this repository.
 - Set package and lockfile versions to 0.3.0 and update the workshop badge.
 - Correct the 0.2.1 release note's unshipped capability and profile claim.
   README now describes the tests that run: this repository has no Elixir

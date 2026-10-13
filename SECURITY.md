@@ -22,9 +22,10 @@ the public `@charter-agreement-protocol/verifier` package's contract.
 
 ## Reporting a vulnerability
 
-Report privately to the repository maintainer at palermo777@gmail.com.
-Do not open a public issue containing an exploit, credential, private key
-or unreleased vulnerability detail.
+Report it privately through GitHub's private vulnerability reporting for
+`baselabs/charter_agreement_signer_typescript` (the repository's Security
+tab, then "Report a vulnerability"). Do not open a public issue containing
+an exploit, credential, private key or unreleased vulnerability detail.
 
 A report should include:
 
