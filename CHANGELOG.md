@@ -61,9 +61,11 @@ documented here.
 - Delegate preparation and completion to verifier 0.7.0's `prepareSigning`
   and `finishSigning`; remove the signer's context derivation,
   producer calls, assembly calls, and choice of post-sign verification function.
-- Preserve entry copies of claims and chain arrays and copy limits, profile,
-  and predecessor lineage before the first `await`, including Proxy-backed
-  plain objects. Unreadable entry data returns typed input errors.
+- Structurally copy claims, context, limits, profile, and predecessor before
+  the first `await`, including Proxy-backed plain objects and repeated objects.
+  Copies contain fresh plain JSON values. Class instances, other non-JSON
+  values, cycles, and throwing getters return `invalid_input`/`invalid_type`.
+  Array copies do not call subclass constructor hooks.
 - Resolve limits, then profile, then algorithm, before taking the key snapshot.
   Absent, `undefined`, and `null` algorithms select Ed25519. Explicit values are
   `Ed25519` and `ML-DSA-65`; others return `invalid_input`/`algorithm_unsupported`

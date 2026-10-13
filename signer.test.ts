@@ -1317,7 +1317,7 @@ test("raised limits prepare and finish a receipt larger than the default compact
 test("throwing claim and context getters return input errors before signing", async () => {
   const { handle, counts } = callbackCounts(11, "issuer-key-001");
   const claims = Object.defineProperty({}, "protocol_revision", { enumerable: true, get() { throw new Error("claims unreadable"); } });
-  assert.deepEqual(await signDescriptor(claims, handle), { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+  assert.deepEqual(await signDescriptor(claims, handle), { ok: false, error: "invalid_input", code: "invalid_type" });
   assert.equal(counts.signs, 0);
   const chain = Object.defineProperty(copyChain(world.genesisView), "revisions", { enumerable: true, get() { throw new Error("context unreadable"); } });
   assert.deepEqual(await signReceipt(receiptClaims(), handle, chain), { ok: false, error: "invalid_input", code: "invalid_type" });
@@ -1447,4 +1447,120 @@ test("mixed sets use the signing party profile for acceptance and termination", 
   assert.deepEqual(await signReceipt({ ...receiptClaims(), charter_id: digested.digest, revision_digest: digested.digest }, issuer.handle, chain, { profile }),
     { ok: false, error: "invalid_input", code: "algorithm_outside_profile" });
   assert.equal(issuer.counts.signs, before);
+});
+
+
+test("entry copies retain shared and nested claims before keyIdentity", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  const shared = { nested: { value: "entry" } };
+  const row = { value: "entry" };
+  const claims = {
+    ...genesisClaims("Ed25519", "issuer-key-001", derivedPublic(keys.privateKey)),
+    extensions: { critical: {}, optional: {
+      "com.example/first": shared, "com.example/second": shared, "com.example/rows": [row],
+    } },
+  };
+  const expected = structuredClone(claims);
+  let identities = 0;
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity() {
+      identities += 1;
+      shared.nested.value = "changed";
+      row.value = "changed";
+      return { kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) };
+    },
+    sign(message) {
+      signs += 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  const result = await signDescriptor(claims, handle);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.equal(identities, 1);
+  assert.equal(signs, 1);
+  const checked = verifyDescriptor(result.result.descriptor);
+  assert.ok(checked.ok);
+  const payload = JSON.parse(Buffer.from(result.result.descriptor.split(".")[1], "base64url").toString("utf8"));
+  assert.deepEqual(payload, expected);
+});
+
+test("non-JSON claims values return invalid_type before either key callback", async (t) => {
+  class NestedValue { value = "entry"; }
+  const cycle: Record<string, unknown> = {};
+  cycle.self = cycle;
+  const values: Array<[string, unknown]> = [
+    ["class instance", new NestedValue()], ["date", new Date("2026-08-25T10:00:00Z")],
+    ["map", new Map()], ["set", new Set()], ["typed array", new Uint8Array(1)],
+    ["boxed number", new Number(1)], ["function", () => "entry"], ["bigint", 1n],
+    ["symbol", Symbol("value")], ["undefined", undefined], ["non-finite number", NaN],
+    ["infinity", Infinity], ["cycle", cycle],
+  ];
+  for (const [label, value] of values) await t.test(label, async () => {
+    const { handle, counts } = callbackCounts(11, "issuer-key-001");
+    for (const { kind, claims } of signingCalls(handle)) {
+      const copiedClaims = { ...claims, ...(kind === "termination" ? { extra: value } : {
+        extensions: { critical: {}, optional: { "com.example/value": value } },
+      }) };
+      const result = kind === "descriptor" ? await signDescriptor(copiedClaims, handle) :
+        kind === "receipt" ? await signReceipt(copiedClaims, handle, world.genesisView) :
+        kind === "acceptance" ? await signAcceptance(copiedClaims, handle, world.genesisView) :
+        await signTermination(copiedClaims, handle, world.genesisView);
+      assert.deepEqual(result, { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
+    }
+    assert.deepEqual(counts, { identities: 0, signs: 0 });
+  });
+});
+
+test("array subclasses are copied into plain arrays without constructor hooks", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const rows = ["entry"];
+  class Rows extends Array<string> {}
+  Object.setPrototypeOf(rows, Rows.prototype);
+  let hooks = 0;
+  Object.defineProperty(rows, "constructor", { get() { hooks += 1; throw new Error("array constructor"); } });
+  const result = await signDescriptor({
+    ...genesisClaims("Ed25519", "issuer-key-001", derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey)),
+    extensions: { critical: {}, optional: { "com.example/rows": rows } },
+  }, handle);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.equal(hooks, 0);
+  assert.deepEqual(counts, { identities: 1, signs: 1 });
+  const payload = JSON.parse(Buffer.from(result.result.descriptor.split(".")[1], "base64url").toString("utf8"));
+  assert.deepEqual(payload.extensions.optional["com.example/rows"], ["entry"]);
+});
+
+test("class instances and throwing nested getters are invalid_type in entry options", async (t) => {
+  class LimitsValue {
+    constructor() {
+      Object.defineProperty(this, "max_bytes", { enumerable: true, get() { throw new Error("limits unreadable"); } });
+    }
+  }
+  class ProfileValue { get algorithms(): string[] { throw new Error("profile unreadable"); } }
+  class PreviousValue { get lineage(): string[] { throw new Error("predecessor unreadable"); } }
+  class BoundsValue { get min(): number { throw new Error("bounds unreadable"); } max = 2; }
+  const throwingLimits = Object.defineProperty({}, "max_bytes", { enumerable: true, get() { throw new Error("limits unreadable"); } });
+  const throwingProfile = Object.defineProperty({}, "algorithms", { enumerable: true, get() { throw new Error("profile unreadable"); } });
+  const throwingPrevious = Object.defineProperty({}, "lineage", { enumerable: true, get() { throw new Error("predecessor unreadable"); } });
+  const values = [
+    { limits: new LimitsValue() }, { profile: new ProfileValue() }, { predecessor: new PreviousValue() },
+    { profile: { revisions: new BoundsValue() } },
+    { limits: throwingLimits }, { profile: throwingProfile }, { predecessor: throwingPrevious },
+  ];
+  for (const [index, opts] of values.entries()) await t.test(String(index), async () => {
+    const { handle, counts } = callbackCounts(11, "issuer-key-001");
+    assert.deepEqual(await signDescriptor(genesisClaims("Ed25519", "issuer-key-001", derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey)), handle, opts as never),
+      { ok: false, error: "invalid_input", code: "invalid_type" });
+    assert.deepEqual(counts, { identities: 0, signs: 0 });
+  });
+});
+
+test("a throwing claims getter with a wrong-type context returns invalid_type", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const claims = Object.defineProperty({}, "protocol_revision", { enumerable: true, get() { throw new Error("claims unreadable"); } });
+  for (const context of [null, 42, [], "revision text"] as const) {
+    assert.deepEqual(await signAcceptance(claims, handle, context as never),
+      { ok: false, error: "invalid_input", code: "invalid_type" });
+  }
+  assert.equal(counts.signs, 0);
 });

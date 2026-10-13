@@ -88,8 +88,11 @@ A `ChainView` contains four string arrays: `{ revisions, acceptances,
 descriptors, terminations }`. Pass all four, including explicit empty arrays.
 Acceptance and termination use this chain directly. The verifier derives the
 claimed revision and the holder's own descriptor history from its verified
-contents. The signer copies claims, context arrays, options, and predecessor
-lineage at entry, before awaiting a key callback.
+contents. The signer structurally copies claims, context, limits, profile,
+and predecessor at entry, before awaiting a key callback. Copies contain
+fresh plain JSON objects and arrays, strings, finite numbers, booleans, and
+null. Repeated objects are copied separately. Class instances, other non-JSON
+values, cycles, and throwing getters return `invalid_input`/`invalid_type`.
 
 Migration from the previous issuing view:
 

@@ -50,42 +50,37 @@ export type SigningOptions = {
 
 export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPredecessor | null };
 
-function copyArray(values: string[]): string[] {
-  return Array.isArray(values) ? [...values] : values;
+// Copy JSON values through ordinary property reads, including Proxy-backed
+// plain objects. Track only ancestors so repeated objects get separate copies.
+// Array indices go into a plain array without reading a constructor hook.
+function copyClaims<T>(value: T): T {
+  const ancestors = new WeakSet<object>();
+  const copy = (item: unknown): unknown => {
+    if (item === null || typeof item === "string" || typeof item === "boolean") return item;
+    if (typeof item === "number" && Number.isFinite(item)) return item;
+    if (typeof item !== "object" || ancestors.has(item)) throw new TypeError("invalid_type");
+    ancestors.add(item);
+    try {
+      if (Array.isArray(item)) {
+        const values: unknown[] = [];
+        for (let index = 0; index < item.length; index += 1) values.push(copy(item[index]));
+        return values;
+      }
+      const prototype = Object.getPrototypeOf(item);
+      if ((prototype !== Object.prototype && prototype !== null) || Object.getOwnPropertySymbols(item).length > 0) {
+        throw new TypeError("invalid_type");
+      }
+      return Object.fromEntries(Object.keys(item).map((key) => [key, copy((item as Record<string, unknown>)[key])]));
+    } finally {
+      ancestors.delete(item);
+    }
+  };
+  return copy(value) as T;
 }
 
 function copyChainView(chain: ChainView): ChainView {
-  if (!chain || typeof chain !== "object" || Array.isArray(chain)) return chain;
-  return {
-    ...chain,
-    revisions: copyArray(chain.revisions),
-    acceptances: copyArray(chain.acceptances),
-    descriptors: copyArray(chain.descriptors),
-    terminations: copyArray(chain.terminations),
-  };
-}
-
-// Claims are copied at entry too, so a key callback cannot change the
-// claims that get framed after its snapshot. The copy walks plain objects
-// and arrays through ordinary property reads, so a Proxy (Vue, MobX, Immer
-// state) is copied like the object it presents. Any other value (a class
-// instance, a function, a bigint) is kept as is for the producer to judge,
-// as before; a cycle is kept by reference and the producer rejects it.
-function copyClaims(claims: Record<string, unknown>): Record<string, unknown> {
-  const seen = new WeakSet<object>();
-  const copy = (value: unknown): unknown => {
-    if (value === null || typeof value !== "object") return value;
-    if (seen.has(value)) return value;
-    if (Array.isArray(value)) {
-      seen.add(value);
-      return value.map(copy);
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return value;
-    seen.add(value);
-    return Object.fromEntries(Object.keys(value).map((key) => [key, copy((value as Record<string, unknown>)[key])]));
-  };
-  return copy(claims) as Record<string, unknown>;
+  // An omitted context still reaches the verifier after the key snapshot.
+  return chain === undefined ? chain : copyClaims(chain);
 }
 
 async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignError> {
@@ -112,7 +107,8 @@ type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: strin
 
 function readOption(opts: Record<string, unknown>, key: string): { value: unknown } | SignError {
   try {
-    return { value: copyClaims(opts[key] as Record<string, unknown>) };
+    const value = opts[key];
+    return { value: value === undefined || key === "algorithm" ? value : copyClaims(value) };
   } catch (_getter) {
     return { error: "invalid_input", code: "invalid_type" };
   }
@@ -132,7 +128,8 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
   const supplied = opts as Record<string, unknown>;
   const limits = readOption(supplied, "limits");
   if ("error" in limits) return limits;
-  // The verifier resolves settings before decoding any text.
+  // The verifier exports no option validator. Its decoder resolves limits
+  // and profile before reading text, so use it to preserve that order.
   const settings: SigningOptions = { limits: limits.value as Partial<Limits> | undefined };
   const checkedLimits = decodeCharterRevision(undefined, settings);
   if (!checkedLimits.ok && checkedLimits.code === "invalid_limits") {
@@ -180,16 +177,12 @@ async function signPrepared(
 ): Promise<{ compact: string } | SignError> {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
-  try {
-    claims = copyClaims(claims);
-  } catch (_getter) {
-    return { error: "invalid_input", code: "signing_input_invalid" };
-  }
   let retained: DescriptorPredecessor | ChainView | string | null;
   try {
     retained = kind === "descriptor" ? options.predecessor ?? null :
       typeof context === "string" ? context : copyChainView(context as ChainView);
-  } catch (_getter) {
+    claims = copyClaims(claims);
+  } catch (_entry) {
     return { error: "invalid_input", code: "invalid_type" };
   }
   const snapshot = await resolveKeyIdentity(keyHandle);
