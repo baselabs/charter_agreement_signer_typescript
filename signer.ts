@@ -58,6 +58,30 @@ export type ChainView = {
   terminations: string[];
 };
 
+function copyArray(values: string[]): string[] {
+  return Array.isArray(values) ? [...values] : values;
+}
+
+function copyChainView(chain: ChainView): ChainView {
+  if (!chain || typeof chain !== "object" || Array.isArray(chain)) return chain;
+  return {
+    ...chain,
+    revisions: copyArray(chain.revisions),
+    acceptances: copyArray(chain.acceptances),
+    descriptors: copyArray(chain.descriptors),
+    terminations: copyArray(chain.terminations),
+  };
+}
+
+function copyIssuingView(view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView }): typeof view {
+  if (!view || typeof view !== "object") return view;
+  return {
+    ...view,
+    descriptorCompacts: copyArray(view.descriptorCompacts),
+    chain: copyChainView(view.chain),
+  };
+}
+
 function registryRow(algorithm: string) {
   return algorithmRegistry().find((row) => row.name === algorithm) ?? null;
 }
@@ -192,6 +216,7 @@ export async function signReceipt(
   chain: ChainView,
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ receipt: string }>> {
+  chain = copyChainView(chain);
   // The issuing view is REQUIRED (the reference takes ChainFacts or a
   // CharterRevision, never none) and its discipline runs after the build,
   // before the key - the reference's context is a verified ChainFacts by
@@ -219,6 +244,7 @@ export async function signAcceptance(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ acceptance: string }>> {
+  view = copyIssuingView(view);
   const viewChain = viewChainOrInvalid(view);
   const signed = await signProduced(keyHandle, (kid, algorithm) => {
     if ("error" in viewChain) return { ok: false, code: viewChain.code };
@@ -238,6 +264,7 @@ export async function signTermination(
   view: { revisionText: string; descriptorCompacts: string[]; chain: ChainView },
   opts: { algorithm?: string | null } = {},
 ): Promise<SignResult<{ termination: string }>> {
+  view = copyIssuingView(view);
   const viewChain = viewChainOrInvalid(view);
   const signed = await signProduced(keyHandle, (kid, algorithm) => {
     if ("error" in viewChain) return { ok: false, code: viewChain.code };

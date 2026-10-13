@@ -108,6 +108,98 @@ function signingCalls(handle: unknown) {
   ];
 }
 
+function copyChain(chain: ChainView): ChainView {
+  return {
+    revisions: [...chain.revisions],
+    acceptances: [...chain.acceptances],
+    descriptors: [...chain.descriptors],
+    terminations: [...chain.terminations],
+  };
+}
+
+test("signReceipt keeps entry acceptances when sign empties the caller's array", async () => {
+  const chain = copyChain(world.genesisView);
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity: () => ({ kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) }),
+    sign(message) {
+      signs += 1;
+      chain.acceptances.length = 0;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  const result = await signReceipt(receiptClaims(), handle, chain);
+  assert.equal(signs, 1);
+  assert.equal(chain.acceptances.length, 0);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.ok(verifyReceipt(result.result.receipt, world.genesisView).ok);
+  assert.equal(verifyReceipt(result.result.receipt, chain).ok, false);
+});
+
+test("signReceipt copies all four arrays before keyIdentity can mutate them", async () => {
+  for (const field of ["revisions", "acceptances", "descriptors", "terminations"] as const) {
+    const chain = copyChain(world.genesisView);
+    const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+    const handle: KeyHandle = {
+      async keyIdentity() {
+        chain[field].splice(0, chain[field].length, "invalid artifact text");
+        return { kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) };
+      },
+      sign: (message) => nodeSign(null, message, keys.privateKey),
+    };
+    const result = await signReceipt(receiptClaims(), handle, chain);
+    assert.ok(result.ok, `${field}: ${JSON.stringify(result)}`);
+    assert.ok(verifyReceipt(result.result.receipt, world.genesisView).ok);
+  }
+});
+
+test("acceptance and termination retain entry views across both key callbacks", async () => {
+  for (const kind of ["acceptance", "termination"] as const) {
+    for (const mutateAt of ["identity", "sign"] as const) {
+      const chain = copyChain(world.genesisView);
+      const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain };
+      const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+      const mutate = () => {
+        chain.acceptances.length = 0;
+        chain.revisions.length = 0;
+        chain.descriptors.length = 0;
+        chain.terminations.push("invalid artifact text");
+        view.descriptorCompacts.length = 0;
+        view.revisionText = "invalid revision text";
+      };
+      const handle: KeyHandle = {
+        keyIdentity() {
+          if (mutateAt === "identity") mutate();
+          return { kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) };
+        },
+        sign(message) {
+          if (mutateAt === "sign") mutate();
+          return nodeSign(null, message, keys.privateKey);
+        },
+      };
+      if (kind === "acceptance") {
+        const result = await signAcceptance(world.genesisIssuerClaims, handle, view);
+        assert.ok(result.ok, `${kind}/${mutateAt}: ${JSON.stringify(result)}`);
+        assert.ok(verifyAcceptance(result.result.acceptance, world.genesisText, [world.issuer.descriptor]).ok);
+      } else {
+        const result = await signTermination({
+          protocol_revision: 2,
+          charter_id: world.genesisDigest,
+          governing_revision_digest: world.genesisDigest,
+          party_descriptor_digest: world.issuer.pdd,
+          party_role: "issuer",
+          reason_code: "mutual",
+          issued_at: "2026-08-25T14:00:00Z",
+          effective_at: "2026-08-25T15:00:00Z",
+        }, handle, view);
+        assert.ok(result.ok, `${kind}/${mutateAt}: ${JSON.stringify(result)}`);
+        assert.ok(verifyTermination(result.result.termination, world.genesisText, [world.issuer.descriptor]).ok);
+      }
+    }
+  }
+});
+
 test("unsupported algorithm values return algorithm_unsupported before either key callback", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   let identities = 0;

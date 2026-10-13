@@ -90,6 +90,9 @@ The acceptance/termination `view` is `{ revisionText, descriptorCompacts,
 chain }`: the revision the claims name, the signing party's descriptor
 chain, and the caller's full `ChainView` (`{ revisions, acceptances,
 descriptors, terminations }`) the refusal guards verify and bind against.
+The signer copies these arrays, the descriptor list and the revision text
+at entry, before awaiting either key callback. Receipts also copy their
+chain arrays at entry.
 
 Errors are closed: `{ ok: false, error: "invalid_key_handle" \| "signing_failed"
 \| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides

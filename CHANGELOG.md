@@ -13,6 +13,10 @@ documented here.
 
 ### Changed
 
+- Copy the caller's chain arrays and acceptance/termination issuing view
+  at entry, before the first `await`. Key callbacks cannot change the
+  context used by the producers or post-sign verification.
+
 - Resolve the algorithm before calling `keyIdentity`. Absent, `undefined`
   and `null` select Ed25519; supported explicit values are `Ed25519` and
   `ML-DSA-65`. Other values, including non-strings, return `invalid_input`
