@@ -40,7 +40,7 @@ export type KeyHandle = {
 };
 
 export type SignError =
-  | { error: "invalid_handle" }
+  | { error: "invalid_key_handle" }
   | { error: "signing_failed" }
   | { error: "invalid_input"; code: string }
   | { error: "refused"; code: string }
@@ -64,7 +64,7 @@ async function resolveKeyIdentity(
   handle: unknown,
 ): Promise<{ kid: string; publicKey: string } | SignError> {
   if (handle === null || typeof handle !== "object" || !("keyIdentity" in handle)) {
-    return { error: "invalid_handle" };
+    return { error: "invalid_key_handle" };
   }
   try {
     const snapshot = await (handle as KeyHandle).keyIdentity(handle);
@@ -77,9 +77,9 @@ async function resolveKeyIdentity(
     ) {
       return snapshot;
     }
-    return { error: "invalid_handle" };
+    return { error: "invalid_key_handle" };
   } catch (_fault) {
-    return { error: "invalid_handle" };
+    return { error: "invalid_key_handle" };
   }
 }
 

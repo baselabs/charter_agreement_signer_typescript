@@ -86,7 +86,7 @@ chain }`: the revision the claims name, the signing party's descriptor
 chain, and the caller's full `ChainView` (`{ revisions, acceptances,
 descriptors, terminations }`) the refusal guards verify and bind against.
 
-Errors are closed: `{ ok: false, error: "invalid_handle" \| "signing_failed"
+Errors are closed: `{ ok: false, error: "invalid_key_handle" \| "signing_failed"
 \| "invalid_input" \| "refused" \| "verification_failed" }` — `code` rides
 only on `invalid_input` and `refused`; `verification_failed` is bare
 (reference parity).

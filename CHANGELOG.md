@@ -5,6 +5,12 @@ documented here.
 
 ## [Unreleased]
 
+### Breaking
+
+- Rename the handle error from `invalid_handle` to `invalid_key_handle`.
+  Migration: update error comparisons and exhaustive switches to the new
+  string. The result shape is unchanged.
+
 ### Changed
 
 - Use `@charter-agreement-protocol/verifier` `^0.6.0` (locked to 0.6.0).

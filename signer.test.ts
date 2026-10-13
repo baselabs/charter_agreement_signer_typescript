@@ -59,6 +59,25 @@ function digestOf(text: string): string {
   return "sha-256:" + createHash("sha256").update(text).digest("base64url");
 }
 
+test("malformed key snapshots return invalid_key_handle on every signing entry point", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 17));
+  let signs = 0;
+  const handle: KeyHandle = {
+    keyIdentity: () => ({ kid: "", publicKey: derivedPublic(keys.privateKey) }),
+    sign(message) {
+      signs += 1;
+      return nodeSign(null, message, keys.privateKey);
+    },
+  };
+  const expected = { ok: false, error: "invalid_key_handle" };
+  assert.deepEqual(await signDescriptor({}, handle), expected);
+  assert.deepEqual(await signReceipt({}, handle, world.genesisView), expected);
+  const view = { revisionText: world.genesisText, descriptorCompacts: [world.issuer.descriptor], chain: world.genesisView };
+  assert.deepEqual(await signAcceptance({}, handle, view), expected);
+  assert.deepEqual(await signTermination({}, handle, view), expected);
+  assert.equal(signs, 0);
+});
+
 test("signDescriptor: full custody path, post-verified at revision 2", async () => {
   const { handle } = rawKeyHandle(Buffer.alloc(32, 1), "test-key-001");
 
