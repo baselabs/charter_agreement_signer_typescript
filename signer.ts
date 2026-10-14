@@ -6,6 +6,7 @@
 
 import {
   DEFAULT_LIMITS,
+  algorithmRegistry,
   MAXIMUM_LIMITS,
   defaultEmissionName,
   decodeCharterRevision,
@@ -53,7 +54,7 @@ export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPrede
 
 const COPY_LIMIT = Symbol("copy limit");
 const ARTIFACT_LISTS = new Set(["revisions", "acceptances", "descriptors", "terminations", "lineage"]);
-type CopySettings = { optionValues?: boolean; limits?: Limits; context?: boolean };
+type CopySettings = { limits?: Limits; context?: boolean };
 type CopyFrame = {
   source: object;
   target: Record<string, unknown> | unknown[];
@@ -66,7 +67,7 @@ type CopyFrame = {
 
 // Read one child at a time without recursion or array constructor hooks.
 // Only ancestors are retained, so repeated objects get separate copies.
-function copyClaims<T>(value: T, { optionValues = false, limits, context = false }: CopySettings = {}): T {
+function copyClaims<T>(value: T, { limits, context = false }: CopySettings = {}): T {
   const ancestors = new WeakSet<object>();
   const frames: CopyFrame[] = [];
   let bytes = 0;
@@ -89,10 +90,7 @@ function copyClaims<T>(value: T, { optionValues = false, limits, context = false
       addBytes(artifact ? 2 : stringBytes(item));
       return item;
     }
-    // Option scalars, including undefined and nonfinite numbers, stay intact
-    // so the verifier can apply its own validity checks and defaults.
-    if (optionValues && item === undefined) return item;
-    if (typeof item === "number" && (optionValues || Number.isFinite(item))) {
+    if (typeof item === "number" && Number.isFinite(item)) {
       addBytes(JSON.stringify(item).length);
       return item;
     }
@@ -158,63 +156,79 @@ async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignEr
   }
 }
 
-// Options are a plain object with known keys only: a misspelled key must not
-// fall back to the default silently, and a Map, a class instance or a
-// throwing getter is caller input error, never a thrown exception.
 const OPTION_KEYS = new Set(["algorithm", "limits", "profile"]);
 const byteArrayTag = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag)!.get!;
 
 type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
 
-function readOption(opts: Record<string, unknown>, key: string, limits?: Limits): { value: unknown } | SignError {
-  try {
-    const value = opts[key];
-    return { value: value === undefined || key === "algorithm" ? value : copyClaims(value, {
-      optionValues: key !== "predecessor", limits, context: key === "predecessor",
-    }) };
-  } catch (fault) {
-    return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
+// Read the defined shape once, including inherited and nonenumerable members.
+// Invalid member values stay opaque for the verifier to check synchronously.
+function optionMembers(value: unknown, names: string[], nested: Record<string, (value: unknown) => unknown> = {}): unknown {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || value instanceof Number) return value;
+  const source = value as Record<string, unknown>;
+  const result: Record<string, unknown> = Object.create(null);
+  const unknown = Object.keys(source).find((name) => !names.includes(name));
+  if (unknown !== undefined) result[unknown] = null;
+  for (const name of names) {
+    const member = source[name];
+    if (member !== undefined || name in source) result[name] = nested[name] ? nested[name](member) : member;
   }
+  return result;
+}
+
+function optionAlgorithms(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  const length = value.length;
+  if (!Number.isSafeInteger(length) || length < 0) throw new TypeError("invalid_type");
+  // A unique registry subset cannot be longer than the registry. Retain an
+  // invalid length for the verifier without reading an unbounded caller list.
+  if (length > algorithmRegistry().length) return Array(Math.min(length, MAXIMUM_LIMITS.max_artifact_set_items + 1));
+  const result: unknown[] = [];
+  for (let i = 0; i < length; i += 1) result.push(value[i]);
+  return result;
+}
+
+function checkOptions(settings: SigningOptions): SignError | null {
+  // Empty text always gives invalid_syntax after successful option checks.
+  // Every earlier code comes from the verifier, including copy failures.
+  const checked = decodeCharterRevision("", settings);
+  return !checked.ok && checked.code !== "invalid_syntax" ? { error: "invalid_input", code: checked.code } : null;
 }
 
 function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | SignError {
   try {
-    if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return { error: "invalid_input", code: "invalid_type" };
-    const prototype = Object.getPrototypeOf(opts);
-    if ((prototype !== Object.prototype && prototype !== null) ||
-        !Reflect.ownKeys(opts).every((key) => typeof key === "string" && (OPTION_KEYS.has(key) || descriptor && key === "predecessor"))) {
+    if (opts === null || typeof opts !== "object" || Array.isArray(opts) || opts instanceof Number) {
       return { error: "invalid_input", code: "invalid_type" };
     }
-  } catch (_shape) {
-    return { error: "invalid_input", code: "invalid_type" };
+    if (!Reflect.ownKeys(opts).every((key) => typeof key === "string" &&
+        (OPTION_KEYS.has(key) || descriptor && key === "predecessor"))) {
+      return { error: "invalid_input", code: "invalid_type" };
+    }
+    const supplied = opts as Record<string, unknown>;
+    const settings: SigningOptions = {
+      limits: optionMembers(supplied.limits, Object.keys(DEFAULT_LIMITS)) as Partial<Limits> | undefined,
+    };
+    const limitsError = checkOptions(settings);
+    if (limitsError) return limitsError;
+    settings.profile = optionMembers(supplied.profile, ["algorithms", "revisions"], {
+      algorithms: optionAlgorithms,
+      revisions: (range) => optionMembers(range, ["min", "max"]),
+    }) as Profile | undefined;
+    const profileError = checkOptions(settings);
+    if (profileError) return profileError;
+    const algorithm = supplied.algorithm ?? defaultEmissionName();
+    if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
+      return { error: "invalid_input", code: "algorithm_unsupported" };
+    }
+    if (!descriptor) return { ...settings, algorithm };
+    const previous = supplied.predecessor;
+    const predecessor = previous === undefined ? previous : copyClaims(previous, {
+      limits: { ...DEFAULT_LIMITS, ...settings.limits }, context: true,
+    });
+    return { ...settings, algorithm, predecessor: predecessor as DescriptorPredecessor | undefined };
+  } catch (fault) {
+    return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
-  const supplied = opts as Record<string, unknown>;
-  const limits = readOption(supplied, "limits");
-  if ("error" in limits) return limits;
-  // The verifier exports no option validator. Its decoder resolves limits
-  // and profile before reading text, so use it to preserve that order.
-  const settings: SigningOptions = { limits: limits.value as Partial<Limits> | undefined };
-  const checkedLimits = decodeCharterRevision(undefined, settings);
-  if (!checkedLimits.ok && checkedLimits.code === "invalid_limits") {
-    return { error: "invalid_input", code: checkedLimits.code };
-  }
-  const profile = readOption(supplied, "profile");
-  if ("error" in profile) return profile;
-  settings.profile = profile.value as Profile | undefined;
-  const checkedProfile = decodeCharterRevision(undefined, settings);
-  if (!checkedProfile.ok && checkedProfile.code === "invalid_profile") {
-    return { error: "invalid_input", code: checkedProfile.code };
-  }
-  const selected = readOption(supplied, "algorithm");
-  if ("error" in selected) return selected;
-  const algorithm = selected.value ?? defaultEmissionName();
-  if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
-    return { error: "invalid_input", code: "algorithm_unsupported" };
-  }
-  if (!descriptor) return { ...settings, algorithm };
-  const predecessor = readOption(supplied, "predecessor", { ...DEFAULT_LIMITS, ...settings.limits });
-  if ("error" in predecessor) return predecessor;
-  return { ...settings, algorithm, predecessor: predecessor.value as DescriptorPredecessor | undefined };
 }
 
 function prepareError(code: string): SignError {

@@ -330,30 +330,38 @@ function callbackCounts(seed: number, kid: string) {
   return { handle, counts };
 }
 
-test("an options argument that is not an object is invalid_type before either key callback", async () => {
+test("options outside the record shape return invalid_type before either key callback", async () => {
   const { handle, counts } = callbackCounts(11, "issuer-key-001");
-  for (const opts of [null, 42, [], "ML-DSA-65", true]) {
-    for (const { kind, call } of signingCalls(handle)) {
-      assert.deepEqual(await call(opts as never),
-        { ok: false, error: "invalid_input", code: "invalid_type" }, `${kind} ${JSON.stringify(opts)}`);
-    }
-  }
-  assert.equal(counts.identities, 0);
-  assert.equal(counts.signs, 0);
-});
-
-test("unknown option keys, non-plain option objects and throwing option getters are invalid_type", async () => {
-  const { handle, counts } = callbackCounts(11, "issuer-key-001");
-  class Options { algorithm = "Ed25519"; }
-  const throwing = Object.defineProperty({}, "algorithm", { enumerable: true, get() { throw new Error("getter"); } });
-  for (const opts of [{ algoritm: "ML-DSA-65" }, { algorithm: "Ed25519", extra: true }, new Map([["algorithm", "Ed25519"]]), new Options(), throwing]) {
+  for (const opts of [null, 42, [], "ML-DSA-65", true, 1n, Symbol("options"), new Number(1)]) {
     for (const { kind, call } of signingCalls(handle)) {
       assert.deepEqual(await call(opts as never),
         { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
     }
   }
-  assert.equal(counts.identities, 0);
-  assert.equal(counts.signs, 0);
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
+});
+
+test("option records follow the verifier's accepted shapes", async () => {
+  class Options { algorithm = "Ed25519"; }
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const opts of [new Map([["algorithm", "ML-DSA-65"]]), new Options()]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      const result = await call(opts as never);
+      assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+    }
+  }
+  assert.deepEqual(counts, { identities: 8, signs: 8 });
+});
+
+test("unknown option keys and throwing getters return invalid_type before either key callback", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const opts = Object.defineProperty({}, "algorithm", { enumerable: true, get() { throw new Error("getter"); } });
+  for (const value of [opts, { algoritm: "ML-DSA-65" }, { algorithm: "Ed25519", extra: true }]) {
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call(value), { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
+    }
+  }
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
 test("a handle that is not an object, or whose keyIdentity throws, is invalid_key_handle before signing", async () => {
@@ -1745,6 +1753,10 @@ test("sparse profile algorithm lists reject before either key callback", async (
 
 test("option copies preserve the verifier's invalid limits and profile codes", async (t) => {
   const values = [
+    ...[1n, Symbol("value"), new Number(1)].flatMap((value) => [
+      { limits: value }, { limits: { max_bytes: value } }, { profile: value },
+      { profile: { algorithms: [value] } }, { profile: { revisions: { min: value, max: 3 } } },
+    ]),
     { limits: { max_bytes: NaN } },
     { limits: { max_bytes: Infinity } },
     { limits: { max_bytes: undefined } },
@@ -1887,6 +1899,7 @@ test("deep JSON option values reach the verifier without a recursive copy", asyn
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
+
 test("small final compact limits return the verifier code after one snapshot", async () => {
   const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
   const claims = genesisClaims("Ed25519", "issuer-key-001", publicKey);
@@ -1901,3 +1914,48 @@ test("small final compact limits return the verifier code after one snapshot", a
   assert.deepEqual(counts, { identities: 3, signs: 0 });
 });
 
+
+test("defined option members are read once through ordinary property access", async () => {
+  const counts = new Map<string, number>();
+  const read = (name: string, value: unknown) => ({ get() {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    return value;
+  } });
+  const range = Object.create(null, { min: read("min", 2), max: read("max", 2) });
+  const profile = Object.create(null, { algorithms: read("algorithms", ["Ed25519"]), revisions: read("revisions", range) });
+  const limits = Object.create(null, { max_bytes: read("max_bytes", 4096) });
+  const options = Object.create({ }, {
+    limits: read("limits", limits), profile: read("profile", profile), algorithm: read("algorithm", "Ed25519"),
+  });
+  const { handle } = callbackCounts(11, "issuer-key-001");
+  const claims = genesisClaims("Ed25519", "issuer-key-001", derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey));
+  const result = await signDescriptor(claims, handle, options);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.deepEqual(Object.fromEntries(counts), {
+    limits: 1, max_bytes: 1, profile: 1, algorithms: 1, revisions: 1, min: 1, max: 1, algorithm: 1,
+  });
+});
+
+test("inherited options and nested option records match their plain values", async () => {
+  class Bounds { min = 2; max = 2; }
+  class LimitsValue { max_bytes = 4096; }
+  class ProfileValue { algorithms = ["Ed25519"]; revisions = new Bounds(); }
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = genesisClaims("Ed25519", "issuer-key-001", publicKey);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const options of [
+    Object.create({ limits: { max_bytes: 4096 }, profile: { algorithms: ["Ed25519"], revisions: { min: 2, max: 2 } } }),
+    { limits: new LimitsValue(), profile: new ProfileValue() },
+    { limits: Object.create({ max_bytes: 4096 }), profile: Object.create({ algorithms: ["Ed25519"], revisions: Object.create({ min: 2, max: 2 }) }) },
+    { limits: new Map(), profile: new Map() },
+  ]) {
+    const result = await signDescriptor(claims, handle, options);
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.ok(verifyDescriptor(result.result.descriptor).ok);
+  }
+  const options = Object.create({ profile: Object.create({ algorithms: ["ML-DSA-65"] }) });
+  const checked = prepareSigning("descriptor", "issuer-key-001", claims, publicKey, null, { profile: { algorithms: ["ML-DSA-65"] } });
+  assert.deepEqual(checked, { ok: false, code: "algorithm_outside_profile" });
+  assert.deepEqual(await signDescriptor(claims, handle, options), { ok: false, error: "invalid_input", code: checked.code });
+  assert.deepEqual(counts, { identities: 5, signs: 4 });
+});
