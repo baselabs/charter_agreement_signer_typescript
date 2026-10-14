@@ -103,7 +103,7 @@ function copyClaims<T>(value: T): T {
       keys = Object.keys(item);
     }
     const size = array ? item.length : keys!.length;
-    if (!Number.isSafeInteger(size) || size < 0) throw new TypeError("invalid_type");
+    if (!Number.isSafeInteger(size) || size < 0 || array && size > 2 ** 32 - 1) throw new TypeError("invalid_type");
     if (size > (array ? limits.max_array_items : limits.max_object_members)) {
       throw COPY_LIMIT;
     }

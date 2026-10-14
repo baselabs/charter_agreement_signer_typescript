@@ -2062,3 +2062,18 @@ test("unused chain context members do not add a copy limit", async () => {
   assert.ok(verifyReceipt(signed.result.receipt, chain).ok);
   assert.deepEqual(counts, { identities: 1, signs: 1 });
 });
+
+
+test("claims array lengths must fit a plain JSON array", async () => {
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const length of [-1, 1.5, NaN, Infinity, 2 ** 53 - 1]) {
+    const value = new Proxy([], { get(target, key) {
+      return key === "length" ? length : Reflect.get(target, key);
+    } });
+    const claims = { ...genesisClaims("Ed25519", "issuer-key-001", publicKey),
+      extensions: { critical: {}, optional: { "com.example/value": value } } };
+    assert.deepEqual(await signDescriptor(claims, handle), { ok: false, error: "invalid_input", code: "invalid_type" });
+  }
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
+});
