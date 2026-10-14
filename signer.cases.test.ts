@@ -6,7 +6,7 @@ import { SHARED_SOURCE, fixtureBytes, sharedTable, expectedFailure, runCase, ver
 // Every JSON row in this source table can be expressed by the TS signer.
 // Any future exclusions must name the row id and the Elixir-only shape here.
 const unexpressibleRows: Readonly<Record<string, string>> = {};
-const expectedRunRows = 118;
+const expectedRunRows = 122;
 let runRows = 0;
 let edSuccesses = 0;
 let mlSuccesses = 0;

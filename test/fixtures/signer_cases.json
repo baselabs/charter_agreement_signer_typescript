@@ -3677,6 +3677,130 @@
       "options": {
         "algorithm": "Ed25519"
       }
+    },
+    {
+      "claims": {
+        "attestation_hints": [],
+        "descriptor_number": 1,
+        "effective_from": "2026-08-25T10:00:00Z",
+        "extensions": {
+          "critical": {},
+          "optional": {}
+        },
+        "protocol_revision": 2,
+        "verification_keys": [
+          {
+            "algorithm": "Ed25519",
+            "key_id": "issuer-key",
+            "public_key": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+            "status": "active"
+          }
+        ]
+      },
+      "context": null,
+      "expected": {
+        "code": "invalid_type",
+        "custody_called": false,
+        "shape": "invalid_input",
+        "snapshot_called": false
+      },
+      "id": "descriptor-options-before-limits",
+      "key": "ed-issuer",
+      "kind": "descriptor",
+      "options": {
+        "limits": null,
+        "unexpected_option": true
+      }
+    },
+    {
+      "claims": {
+        "accepted_at": "2026-08-25T13:00:00Z",
+        "charter_id": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "party_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "party_role": "issuer",
+        "protocol_revision": 2,
+        "revision_digest": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "revision_number": 1
+      },
+      "context": "ed-pending",
+      "expected": {
+        "code": "invalid_type",
+        "custody_called": false,
+        "shape": "invalid_input",
+        "snapshot_called": false
+      },
+      "id": "acceptance-options-before-limits",
+      "key": "ed-issuer",
+      "kind": "acceptance",
+      "options": {
+        "limits": null,
+        "unexpected_option": true
+      }
+    },
+    {
+      "claims": {
+        "charter_id": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "effective_at": "2026-08-26T13:00:00Z",
+        "governing_revision_digest": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "issued_at": "2026-08-25T13:00:00Z",
+        "party_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "party_role": "issuer",
+        "protocol_revision": 2,
+        "reason_code": "mutual"
+      },
+      "context": "ed-accepted",
+      "expected": {
+        "code": "invalid_type",
+        "custody_called": false,
+        "shape": "invalid_input",
+        "snapshot_called": false
+      },
+      "id": "termination-options-before-limits",
+      "key": "ed-issuer",
+      "kind": "termination",
+      "options": {
+        "limits": null,
+        "unexpected_option": true
+      }
+    },
+    {
+      "claims": {
+        "agent_party_role": "issuer",
+        "charter_id": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "decision": "accepted",
+        "deployment_digest": "sha-256:tWFr0caS0AWFJd2UcB9gZv3kNjIUP8xZ08WWM_h8xgo",
+        "extensions": {
+          "critical": {},
+          "optional": {}
+        },
+        "grant": {
+          "grant_digest": "sha-256:5k224cZ_lMI9VoUZ_fYM31ZJAcnJiht0GYEpnhes_ZI",
+          "id": "grant-2026-07-27-001",
+          "scheme": "bap"
+        },
+        "invocation_id": "123e4567-e89b-42d3-a456-426614174000",
+        "issuing_party_role": "issuer",
+        "occurred_at": "2026-08-25T12:00:00Z",
+        "outcome": "effect_committed",
+        "protocol_revision": 2,
+        "recorded_at": "2026-08-25T12:00:01Z",
+        "revision_digest": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "revision_number": 1
+      },
+      "context": "ed-revision",
+      "expected": {
+        "code": "invalid_type",
+        "custody_called": false,
+        "shape": "invalid_input",
+        "snapshot_called": false
+      },
+      "id": "receipt-options-before-limits",
+      "key": "ed-issuer",
+      "kind": "receipt",
+      "options": {
+        "limits": null,
+        "unexpected_option": true
+      }
     }
   ],
   "contexts": {

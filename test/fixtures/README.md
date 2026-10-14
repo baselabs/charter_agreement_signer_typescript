@@ -5,7 +5,7 @@ source commit and SHA-256 are recorded once in
 [`SHARED_SOURCE`](../signer-cases.ts). The digest covers whitespace as well as
 JSON values. These seeds are public test material.
 
-Run `npm run test:cases` for all 118 Node rows. The runner is
+Run `npm run test:cases` for all 122 Node rows. The runner is
 [`signer.cases.test.ts`](../../signer.cases.test.ts); its empty
 `unexpressibleRows` map is the explicit list of Elixir-only shapes, keyed by
 row id with a reason. This table has no such rows. The run count is asserted,
