@@ -138,8 +138,8 @@ for (const row of sharedTable.cases) {
 
 test("the browser bundle accounts for every shared row", () => {
   assert.equal(runRows, sharedTable.cases.length);
-  assert.equal(edSuccesses, 12);
-  assert.equal(substrateErrors, 9);
+  assert.equal(edSuccesses, 13);
+  assert.equal(substrateErrors, 8);
   process.stdout.write(`Shared browser table: ${runRows} run, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
 });
 

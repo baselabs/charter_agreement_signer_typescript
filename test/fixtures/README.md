@@ -35,7 +35,7 @@ present and expects a substrate error for successful ML-DSA-65 requests,
 including successor requests with retained predecessors whose rows have no
 limited expectation. It checks result
 shapes and callback counts, compares exact Ed25519 compacts, and verifies each
-success in the bundle. All nine substrate errors have zero custody calls.
+success in the bundle. All eight substrate errors have zero custody calls.
 The full table runs in Node 24.8.0 and the current Node 24 line. A mismatch
 prints both the Elixir expectation and TS result and counts. The source table
 is never adjusted to make a mismatch pass.
