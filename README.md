@@ -21,8 +21,8 @@ npm install @charter-agreement-protocol/signer
 ```
 
 Version **0.3.0** requires Node >= 24.8.0 and the verifier 0.7.0 pre-sign API.
-This checkout uses the frozen verifier build at `file:../ts-verifier-070-a066`
-(commit `a06673c`).
+This checkout uses the frozen verifier build at `file:../ts-verifier-070-final`
+(commit `6189bd3`).
 
 ## Quickstart
 
@@ -89,17 +89,19 @@ A `ChainView` contains four string arrays: `{ revisions, acceptances,
 descriptors, terminations }`. Pass all four, including explicit empty arrays.
 Acceptance and termination use this chain directly. The verifier derives the
 claimed revision and the holder's own descriptor history from its verified
-contents. The signer structurally copies claims, context, limits, profile,
-and predecessor at entry, before awaiting a key callback. Copies contain
-fresh plain JSON objects and arrays, strings, finite numbers, booleans, and
-null. Option scalars retain `undefined` and nonfinite numbers for the verifier
-to check. Repeated objects are copied separately. Class instances, other non-JSON
-values, cycles, and throwing getters return `invalid_input`/`invalid_type`.
-Copies use an iterative traversal. Claims copies stop at the caller's JSON
-byte, depth, member, item, and string limits with `invalid_input`/`limit_exceeded`
-before either callback. Retained context lists also stop at the artifact item
-limit. The verifier checks immutable context text under its artifact byte
-limits; those strings are not subject to the parsed claims' string limit.
+contents. The signer copies claims, context, and predecessor at entry, before
+awaiting a key callback. Those copies contain fresh plain JSON objects and
+arrays, strings, finite numbers, booleans, and null. Repeated objects are copied
+separately. Non-JSON claims and context, cycles, and throwing getters return
+`invalid_input`/`invalid_type`.
+
+Claims copies use an iterative traversal guarded by the verifier's maximum
+supported JSON bounds, rather than the caller's limits. Values beyond those
+maximums return `invalid_input`/`signing_input_invalid`. Smaller claims reach
+`prepareSigning`, which owns all checks under caller limits, including final
+compact size. Context copies use the maximum supported bounds; predecessor
+lineage has no signer item limit. The verifier checks immutable artifact text
+under artifact byte limits, separately from parsed claims' string limits.
 
 Migration from the previous issuing view:
 
@@ -129,17 +131,24 @@ uses its snapshot for the custody guard; receipt verification reports
 `signature` in `not_verified`. A chain-backed receipt checks the key against
 the issuing party's descriptor keys in the holder's own view.
 
-`opts` is absent or a plain object with known keys only: `algorithm`, `limits`,
-and `profile`, plus `predecessor` for `signDescriptor`. Another value, an
-unknown key, a `Map`, a class instance, or a throwing getter returns
-`invalid_input` with `code: "invalid_type"`.
+`opts` is absent or an object with known own keys only: `algorithm`, `limits`,
+and `profile`, plus `predecessor` for `signDescriptor`. Another root shape, an
+unknown own key, or a throwing getter returns `invalid_input` with
+`code: "invalid_type"`. Defined members use ordinary property reads, once at
+entry, including inherited and nonenumerable members. Class instances and
+`Map` objects work where the verifier accepts their properties; Map entries
+are not option properties.
 
 `limits` is the verifier's `Partial<Limits>` and `profile` is its `Profile`.
-Malformed JSON values return `invalid_input` with `invalid_limits` or
-`invalid_profile`, in that order, before the algorithm or key snapshot is
-resolved. Option copies preserve scalar values and missing array entries for
-the verifier to check. Sparse profile algorithm lists return `invalid_profile`;
-nonfinite or explicitly undefined limit values return `invalid_limits`.
+The signer reads only their defined shape. Invalid values stay opaque for the
+verifier's synchronous checks; they are not recursively copied by the signer.
+Limits are checked before profile, algorithm, and the key snapshot. Malformed
+values, including bigint, symbol, and boxed numbers, retain the verifier's
+`invalid_limits` or `invalid_profile` result. Sparse algorithm lists return
+`invalid_profile`; nonfinite or explicitly undefined limit values return
+`invalid_limits`. A list longer than the algorithm registry cannot be a valid
+unique subset, so its invalid length reaches the verifier without reading its
+entries. The verifier's copy failures are also returned unchanged.
 Limits bound the final compact, including signature bytes, and
 every context artifact read; raised limits also apply to assembly and the
 custody guard. Profiles can restrict `algorithms` and/or
@@ -147,6 +156,8 @@ custody guard. Profiles can restrict `algorithms` and/or
 An EdDSA-only profile, an ML-DSA-44/87-only profile, or revisions 1..1 excludes
 every artifact this signer emits. Exclusions return `algorithm_outside_profile`
 or `revision_outside_profile`.
+
+<a id="profile-scope"></a>
 
 For acceptance and termination, the caller's profile covers the claimed
 revision, the signing party's own descriptor history, and the new artifact.

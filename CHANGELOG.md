@@ -84,17 +84,18 @@ documented here.
   The verifier checks option values before either key callback. Sparse profile
   algorithm lists return `invalid_input`/`invalid_profile`; nonfinite or
   explicitly undefined limit values return `invalid_input`/`invalid_limits`.
-- Structurally copy claims, context, limits, profile, and predecessor before
-  the first `await`, including Proxy-backed plain objects and repeated objects.
-  Copies contain fresh plain objects and arrays. Option scalars retain
-  `undefined` and nonfinite numbers for the verifier to check. Class instances,
-  other non-JSON values, cycles, and throwing getters return
-  `invalid_input`/`invalid_type`.
-  Array copies do not call subclass constructor hooks.
-- Copy iteratively and stop at the caller's JSON byte, depth, member, item,
-  and string limits with `invalid_input`/`limit_exceeded` before either callback.
-  Context lists also stop at the artifact item limit. The verifier checks
-  immutable context text under artifact byte limits.
+- Copy claims, context, and predecessor into plain JSON before the first
+  `await`, without array constructor hooks. Claims entry guards use the
+  verifier's maximum JSON bounds. Caller limits and final compact size are
+  checked by `prepareSigning`; oversize claims return `signing_input_invalid`.
+  Predecessor lineage has no signer item limit.
+- Read defined option members once with ordinary property access, including
+  inherited members and accepted class or Map properties. Keep invalid member
+  values opaque for the verifier's checks. Return every verifier option error,
+  including copy errors. Long algorithm lists retain an invalid length without
+  walking their entries.
+- Read browser expectations from the shared table. Report the two ML-DSA
+  predecessor rows missing `expected_limited` and omit them from checked rows.
 - Resolve limits, then profile, then algorithm, before taking the key snapshot.
   Absent, `undefined`, and `null` algorithms select Ed25519. Explicit values are
   `Ed25519` and `ML-DSA-65`; others return `invalid_input`/`algorithm_unsupported`
@@ -104,11 +105,7 @@ documented here.
   CI typechecks and builds the workshop on Linux with Node 24.8.0 and Node 24.
 - SECURITY.md uses GitHub private vulnerability reporting. Evidence descriptions
   name the checks that run; this signer has no telemetry.
-- For acceptance and termination, the caller's profile covers the claimed
-  revision, the signing party's own descriptor history, and the new artifact.
-  The rest of the set is checked under the full default profile. A receipt's
-  profile covers the whole retained set; a descriptor's covers its predecessor
-  history.
+- See the [profile scope](README.md#profile-scope) for the shared ruling.
 
 ### Migration from CAP 0.4 to 0.5
 

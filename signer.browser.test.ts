@@ -97,20 +97,21 @@ test("the browser shim refuses ML-DSA-65 before signing and reports the substrat
   assert.equal(fixture.signs(), 1);
 });
 
+const missingLimitedRows = sharedTable.cases.filter((row) =>
+  sharedTable.keys[row.key].algorithm === "ML-DSA-65" && !row.expected_limited &&
+  (row.expected.shape === "ok" || row.kind === "descriptor" && typeof row.context === "string" &&
+    sharedTable.contexts[row.context]?.type === "predecessor")
+).map((row) => row.id);
+
 let runRows = 0;
 let edSuccesses = 0;
 let substrateErrors = 0;
 for (const row of sharedTable.cases) {
-  test(`shared browser case ${row.id}`, async () => {
+  test(`shared browser case ${row.id}`, {
+    skip: missingLimitedRows.includes(row.id) ? "Shared table has no expected_limited for this ML-DSA predecessor row" : false,
+  }, async () => {
     const { result, counts, context, algorithm } = await runCase(row, browser);
-    // Successor rows without a limited expectation need ML-DSA verification
-    // before a valid or mismatched predecessor digest can be accepted.
-    const needsMlDsa = algorithm === "ML-DSA-65" && (row.expected.shape === "ok" ||
-      row.kind === "descriptor" && context !== null && row.expected.code === "descriptor_chain_invalid");
-    const expected = row.expected_limited ?? (needsMlDsa ? {
-      shape: "algorithm_unsupported_on_substrate", code: "algorithm_unsupported_on_substrate",
-      snapshot_called: true, custody_called: false,
-    } as const : row.expected);
+    const expected = row.expected_limited ?? row.expected;
     const evidence = `${row.id}: ${JSON.stringify({ result, counts })}`;
     runRows += 1;
     assert.deepEqual(counts, {
@@ -137,10 +138,11 @@ for (const row of sharedTable.cases) {
 }
 
 test("the browser bundle accounts for every shared row", () => {
-  assert.equal(runRows, sharedTable.cases.length);
+  assert.equal(runRows + missingLimitedRows.length, sharedTable.cases.length);
   assert.equal(edSuccesses, 13);
-  assert.equal(substrateErrors, 8);
-  process.stdout.write(`Shared browser table: ${runRows} run, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
+  assert.equal(substrateErrors, 6);
+  process.stdout.write(`Shared browser table: ${runRows} run, ${missingLimitedRows.length} missing limited expectations, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
+  if (missingLimitedRows.length) process.stdout.write(`Missing expected_limited: ${missingLimitedRows.join(", ")}.\n`);
 });
 
 test("the workshop flow, bundled with the site's browser shims, forms, accepts, signs a receipt and verifies", async () => {

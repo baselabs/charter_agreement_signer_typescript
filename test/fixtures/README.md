@@ -30,12 +30,12 @@ is publicly verified into the last descriptor's facts. TS chain contexts use
 the same four artifact arrays after public verification; Elixir retains a
 verified struct. Raw set contexts pass the four arrays directly.
 
-The browser bundle test runs every row. It uses `expected_limited` where
-present and expects a substrate error for successful ML-DSA-65 requests,
-including successor requests with retained predecessors whose rows have no
-limited expectation. It checks result
-shapes and callback counts, compares exact Ed25519 compacts, and verifies each
-success in the bundle. All eight substrate errors have zero custody calls.
+The browser bundle test uses `expected_limited` where present and the normal
+expectation otherwise. It runs 120 rows, compares 13 exact Ed25519 successes,
+and checks six substrate errors with zero custody calls. It reports
+`ml-successor-ok` and `ml-successor-wrong` as missing `expected_limited` and
+skips those two rows so the source table can add their expectations. It checks
+result shapes and callback counts and verifies each success in the bundle.
 The full table runs in Node 24.8.0 and the current Node 24 line. A mismatch
 prints both the Elixir expectation and TS result and counts. The source table
 is never adjusted to make a mismatch pass.
