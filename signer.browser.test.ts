@@ -7,7 +7,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { signDescriptor, type KeyHandle } from "./signer.ts";
-import { sharedTable, runCase } from "./test/signer-cases.ts";
+import { sharedTable, runCase, expectedFailure, verifySuccess } from "./test/signer-cases.ts";
 
 let bundleDirectory: string;
 // The workshop flow (web/flow.ts) is typechecked under the browser target
@@ -22,7 +22,7 @@ type BundledWorkshop = new () => {
   tampered(kind: string): Promise<object>;
 };
 let browser: typeof import("./index.ts") &
-  Pick<typeof import("@charter-agreement-protocol/verifier"), "verifyDescriptor" | "verifyChain"> & {
+  Pick<typeof import("@charter-agreement-protocol/verifier"), "verifyDescriptor" | "verifyReceipt" | "verifyChain"> & {
     Workshop: BundledWorkshop;
   };
 
@@ -32,7 +32,7 @@ before(async () => {
   const outfile = join(bundleDirectory, "signer.mjs");
   await build({
     stdin: {
-      contents: 'export * from "./index.ts"; export { verifyDescriptor, verifyChain } from "@charter-agreement-protocol/verifier"; export { Workshop } from "./web/flow.ts";',
+      contents: 'export * from "./index.ts"; export { verifyDescriptor, verifyReceipt, verifyChain } from "@charter-agreement-protocol/verifier"; export { Workshop } from "./web/flow.ts";',
       resolveDir: root,
     },
     absWorkingDir: root,
@@ -97,20 +97,50 @@ test("the browser shim refuses ML-DSA-65 before signing and reports the substrat
   assert.equal(fixture.signs(), 1);
 });
 
-test("shared ML-DSA-65 requests and contexts refuse before browser custody", async () => {
-  const rows = sharedTable.cases.filter((row) => row.expected_limited ||
-    sharedTable.keys[row.key].algorithm === "ML-DSA-65" && row.expected.shape === "ok");
-  assert.equal(rows.length, 8);
-  let runRows = 0;
-  for (const row of rows) {
-    const { result, counts } = await runCase(row, browser);
+let runRows = 0;
+let edSuccesses = 0;
+let substrateErrors = 0;
+for (const row of sharedTable.cases) {
+  test(`shared browser case ${row.id}`, async () => {
+    const { result, counts, context, algorithm } = await runCase(row, browser);
+    // Successor rows without a limited expectation need ML-DSA verification
+    // before a valid or mismatched predecessor digest can be accepted.
+    const needsMlDsa = algorithm === "ML-DSA-65" && (row.expected.shape === "ok" ||
+      row.kind === "descriptor" && context !== null && row.expected.code === "descriptor_chain_invalid");
+    const expected = row.expected_limited ?? (needsMlDsa ? {
+      shape: "algorithm_unsupported_on_substrate", code: "algorithm_unsupported_on_substrate",
+      snapshot_called: true, custody_called: false,
+    } as const : row.expected);
     const evidence = `${row.id}: ${JSON.stringify({ result, counts })}`;
-    assert.deepEqual(result, { ok: false, error: "algorithm_unsupported_on_substrate" }, evidence);
-    assert.deepEqual(counts, { snapshots: 1, custody: 0 }, evidence);
     runRows += 1;
-  }
-  assert.equal(runRows, 8);
-  process.stdout.write(`Shared browser table: ${runRows} ML-DSA-65 requests or contexts refused, 0 custody calls.\n`);
+    assert.deepEqual(counts, {
+      snapshots: Number(expected.snapshot_called), custody: Number(expected.custody_called),
+    }, evidence);
+    if (expected.shape !== "ok") {
+      assert.deepEqual(result, expectedFailure(expected), evidence);
+      if (expected.shape === "algorithm_unsupported_on_substrate") {
+        assert.equal(counts.custody, 0, evidence);
+        substrateErrors += 1;
+      }
+      return;
+    }
+    assert.ok(result.ok, evidence);
+    const compact = result.result[row.kind];
+    assert.deepEqual(result, { ok: true, result: { [row.kind]: compact } }, evidence);
+    assert.equal(algorithm, "Ed25519", evidence);
+    assert.equal(typeof expected.compact, "string", row.id);
+    assert.equal(compact, expected.compact, evidence);
+    edSuccesses += 1;
+    const verified = verifySuccess(row, compact, context, browser);
+    assert.ok(verified.ok, `${evidence} verification=${JSON.stringify(verified)}`);
+  });
+}
+
+test("the browser bundle accounts for every shared row", () => {
+  assert.equal(runRows, sharedTable.cases.length);
+  assert.equal(edSuccesses, 12);
+  assert.equal(substrateErrors, 9);
+  process.stdout.write(`Shared browser table: ${runRows} run, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
 });
 
 test("the workshop flow, bundled with the site's browser shims, forms, accepts, signs a receipt and verifies", async () => {

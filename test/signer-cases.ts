@@ -206,11 +206,12 @@ export async function runCase(row: Case, signer: Signer = nativeSigner) {
   return { result, counts, context, algorithm };
 }
 
-export function verifySuccess(row: Case, compact: string, context: unknown) {
-  if (row.kind === "descriptor") return verifyDescriptor(compact, context as DescriptorPredecessor | null);
-  if (row.kind === "receipt") return verifyReceipt(compact, context as ChainView | string);
+export function verifySuccess(row: Case, compact: string, context: unknown,
+  verifier = { verifyDescriptor, verifyReceipt, verifyChain }) {
+  if (row.kind === "descriptor") return verifier.verifyDescriptor(compact, context as DescriptorPredecessor | null);
+  if (row.kind === "receipt") return verifier.verifyReceipt(compact, context as ChainView | string);
   const chain = context as ChainView;
-  return verifyChain({
+  return verifier.verifyChain({
     ...chain,
     acceptances: row.kind === "acceptance" && !chain.acceptances.includes(compact) ? [...chain.acceptances, compact] : chain.acceptances,
     terminations: row.kind === "termination" ? [...chain.terminations, compact] : chain.terminations,
