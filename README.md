@@ -95,6 +95,11 @@ fresh plain JSON objects and arrays, strings, finite numbers, booleans, and
 null. Option scalars retain `undefined` and nonfinite numbers for the verifier
 to check. Repeated objects are copied separately. Class instances, other non-JSON
 values, cycles, and throwing getters return `invalid_input`/`invalid_type`.
+Copies use an iterative traversal. Claims copies stop at the caller's JSON
+byte, depth, member, item, and string limits with `invalid_input`/`limit_exceeded`
+before either callback. Retained context lists also stop at the artifact item
+limit. The verifier checks immutable context text under its artifact byte
+limits; those strings are not subject to the parsed claims' string limit.
 
 Migration from the previous issuing view:
 

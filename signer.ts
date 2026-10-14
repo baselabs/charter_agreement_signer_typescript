@@ -5,6 +5,7 @@
 // the wrong-key guard.
 
 import {
+  DEFAULT_LIMITS,
   defaultEmissionName,
   decodeCharterRevision,
   emissions,
@@ -49,40 +50,96 @@ export type SigningOptions = {
 
 export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPredecessor | null };
 
-// Copy JSON values through ordinary property reads, including Proxy-backed
-// plain objects. Track only ancestors so repeated objects get separate copies.
-// Array indices go into a plain array without reading a constructor hook.
-function copyClaims<T>(value: T, optionValues = false): T {
+const COPY_LIMIT = Symbol("copy limit");
+const ARTIFACT_LISTS = new Set(["revisions", "acceptances", "descriptors", "terminations", "lineage"]);
+type CopySettings = { optionValues?: boolean; limits?: Limits; context?: boolean };
+type CopyFrame = {
+  source: object;
+  target: Record<string, unknown> | unknown[];
+  keys: string[] | null;
+  size: number;
+  index: number;
+  depth: number;
+  artifacts: boolean;
+};
+
+// Read one child at a time without recursion or array constructor hooks.
+// Only ancestors are retained, so repeated objects get separate copies.
+function copyClaims<T>(value: T, { optionValues = false, limits, context = false }: CopySettings = {}): T {
   const ancestors = new WeakSet<object>();
-  const copy = (item: unknown): unknown => {
-    if (item === null || typeof item === "string" || typeof item === "boolean") return item;
+  const frames: CopyFrame[] = [];
+  let bytes = 0;
+  const addBytes = (size: number) => {
+    bytes += size;
+    if (limits && bytes > limits.max_bytes) throw COPY_LIMIT;
+  };
+  const stringBytes = (text: string) => {
+    if (limits && Buffer.byteLength(text) > limits.max_string_bytes) throw COPY_LIMIT;
+    return Buffer.byteLength(JSON.stringify(text));
+  };
+  const copy = (item: unknown, depth: number, artifacts = false, artifact = false): unknown => {
+    if (item === null || typeof item === "boolean") {
+      addBytes(item === null || item === true ? 4 : 5);
+      return item;
+    }
+    if (typeof item === "string") {
+      // Context artifact text is immutable. The verifier checks its bytes
+      // per artifact and per set; JSON string limits apply to parsed claims.
+      addBytes(artifact ? 2 : stringBytes(item));
+      return item;
+    }
     // Option scalars, including undefined and nonfinite numbers, stay intact
     // so the verifier can apply its own validity checks and defaults.
     if (optionValues && item === undefined) return item;
-    if (typeof item === "number" && (optionValues || Number.isFinite(item))) return item;
+    if (typeof item === "number" && (optionValues || Number.isFinite(item))) {
+      addBytes(JSON.stringify(item).length);
+      return item;
+    }
     if (typeof item !== "object" || ancestors.has(item)) throw new TypeError("invalid_type");
-    ancestors.add(item);
-    try {
-      if (Array.isArray(item)) {
-        const values: unknown[] = [];
-        for (let index = 0; index < item.length; index += 1) values.push(copy(item[index]));
-        return values;
-      }
+    if (limits && depth + 1 > limits.max_depth) throw COPY_LIMIT;
+    const array = Array.isArray(item);
+    let keys: string[] | null = null;
+    if (!array) {
       const prototype = Object.getPrototypeOf(item);
       if ((prototype !== Object.prototype && prototype !== null) || Object.getOwnPropertySymbols(item).length > 0) {
         throw new TypeError("invalid_type");
       }
-      return Object.fromEntries(Object.keys(item).map((key) => [key, copy((item as Record<string, unknown>)[key])]));
-    } finally {
-      ancestors.delete(item);
+      keys = Object.keys(item);
     }
+    const size = array ? item.length : keys!.length;
+    if (!Number.isSafeInteger(size) || size < 0) throw new TypeError("invalid_type");
+    if (limits && size > (array ? artifacts ? limits.max_artifact_set_items : limits.max_array_items : limits.max_object_members)) {
+      throw COPY_LIMIT;
+    }
+    addBytes(2 + Math.max(0, size - 1));
+    const target: Record<string, unknown> | unknown[] = array ? [] : Object.create(null);
+    ancestors.add(item);
+    frames.push({ source: item, target, keys, size, index: 0, depth: depth + 1, artifacts });
+    return target;
   };
-  return copy(value) as T;
+  const result = copy(value, 0);
+  while (frames.length > 0) {
+    const frame = frames[frames.length - 1];
+    if (frame.index === frame.size) {
+      ancestors.delete(frame.source);
+      frames.pop();
+      continue;
+    }
+    const index = frame.index++;
+    const key = frame.keys ? frame.keys[index] : String(index);
+    if (frame.keys) addBytes(stringBytes(key) + 1);
+    const child = (frame.source as Record<string, unknown>)[key];
+    const artifacts = context && frame.depth === 1 && frame.keys !== null && ARTIFACT_LISTS.has(key);
+    const copied = copy(child, frame.depth, artifacts, frame.artifacts);
+    if (Array.isArray(frame.target)) frame.target.push(copied);
+    else frame.target[key] = copied;
+  }
+  return result as T;
 }
 
-function copyChainView(chain: ChainView): ChainView {
+function copyChainView(chain: ChainView, limits: Limits): ChainView {
   // An omitted context still reaches the verifier after the key snapshot.
-  return chain === undefined ? chain : copyClaims(chain);
+  return chain === undefined ? chain : copyClaims(chain, { limits, context: true });
 }
 
 async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignError> {
@@ -108,12 +165,14 @@ const byteArrayTag = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8
 
 type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
 
-function readOption(opts: Record<string, unknown>, key: string): { value: unknown } | SignError {
+function readOption(opts: Record<string, unknown>, key: string, limits?: Limits): { value: unknown } | SignError {
   try {
     const value = opts[key];
-    return { value: value === undefined || key === "algorithm" ? value : copyClaims(value, key !== "predecessor") };
-  } catch (_getter) {
-    return { error: "invalid_input", code: "invalid_type" };
+    return { value: value === undefined || key === "algorithm" ? value : copyClaims(value, {
+      optionValues: key !== "predecessor", limits, context: key === "predecessor",
+    }) };
+  } catch (fault) {
+    return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
 }
 
@@ -152,7 +211,7 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     return { error: "invalid_input", code: "algorithm_unsupported" };
   }
   if (!descriptor) return { ...settings, algorithm };
-  const predecessor = readOption(supplied, "predecessor");
+  const predecessor = readOption(supplied, "predecessor", { ...DEFAULT_LIMITS, ...settings.limits });
   if ("error" in predecessor) return predecessor;
   return { ...settings, algorithm, predecessor: predecessor.value as DescriptorPredecessor | undefined };
 }
@@ -180,13 +239,14 @@ async function signPrepared(
 ): Promise<{ compact: string } | SignError> {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
+  const copyLimits = { ...DEFAULT_LIMITS, ...options.limits };
   let retained: DescriptorPredecessor | ChainView | string | null;
   try {
     retained = kind === "descriptor" ? options.predecessor ?? null :
-      typeof context === "string" ? context : copyChainView(context as ChainView);
-    claims = copyClaims(claims);
-  } catch (_entry) {
-    return { error: "invalid_input", code: "invalid_type" };
+      typeof context === "string" ? context : copyChainView(context as ChainView, copyLimits);
+    claims = copyClaims(claims, { limits: copyLimits });
+  } catch (fault) {
+    return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
   const snapshot = await resolveKeyIdentity(keyHandle);
   if ("error" in snapshot) return snapshot;
