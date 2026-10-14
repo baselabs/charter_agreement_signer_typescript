@@ -1411,6 +1411,39 @@ test("the wrong-key guard rejects bytes changed in place by the signing callback
   }
 });
 
+test("completion uses the signature bytes copied for the guard", async () => {
+  const keys = ed25519FromSeed(Buffer.alloc(32, 11));
+  let signs = 0;
+  let reads = 0;
+  let copyReads = 0;
+  const handle: KeyHandle = {
+    keyIdentity: () => ({ kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) }),
+    sign(message) {
+      signs += 1;
+      const signature = new Uint8Array(nodeSign(null, message, keys.privateKey));
+      const length = signature.length;
+      reads = 0;
+      copyReads = Infinity;
+      Object.defineProperty(signature, "length", { get() {
+        reads += 1;
+        if (reads > copyReads) signature[0] ^= 1;
+        return length;
+      } });
+      // Count this runtime's reads for one copy of the real signature.
+      Buffer.from(signature);
+      copyReads = reads;
+      reads = 0;
+      return signature;
+    },
+  };
+  for (const { kind, call } of signingCalls(handle)) {
+    const result = await call({});
+    assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+    assert.equal(reads, copyReads, kind);
+  }
+  assert.equal(signs, 4);
+});
+
 test("Ed25519 compacts retain byte identity with the build-only producer surface", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   const { handle } = rawKeyHandle(Buffer.alloc(32, 11), "issuer-key-001");

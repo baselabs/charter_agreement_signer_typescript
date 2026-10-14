@@ -208,14 +208,20 @@ async function signPrepared(
   if (!ArrayBuffer.isView(signature) || byteArrayTag.call(signature) !== "Uint8Array") {
     return { error: "signing_failed" };
   }
+  let checkedSignature: Buffer;
+  try {
+    checkedSignature = Buffer.from(signature);
+  } catch (_signature) {
+    return { error: "signing_failed" };
+  }
   // The verifier's signature guard owns signature length checks.
-  if (!verifySignature(prepared.plan.input.message, Buffer.from(signature), snapshot.publicKey, input.alg, {
+  if (!verifySignature(prepared.plan.input.message, checkedSignature, snapshot.publicKey, input.alg, {
     limits: options.limits,
     profile: options.profile,
   })) {
     return { error: "signing_failed" };
   }
-  const finished = finishSigning(prepared.plan, signature);
+  const finished = finishSigning(prepared.plan, checkedSignature);
   // No real-crypto path reaches this mapping after preparation and the
   // custody guard succeed; keep it for a verifier completion error.
   if (!finished.ok) return { error: "verification_failed" };
