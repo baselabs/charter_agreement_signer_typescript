@@ -16,6 +16,8 @@ import {
 } from "./signer.ts";
 import {
   canonical,
+  prepareSigning,
+  MAXIMUM_LIMITS,
   decodeCharterRevision,
   decodeJsonText,
   descriptorSigningInput,
@@ -1305,7 +1307,7 @@ test("entry copies retain limits, profiles and predecessor lineage across callba
 test("raised limits prepare and finish a receipt larger than the default compact limit", async () => {
   const { handle, counts } = callbackCounts(11, "issuer-key-001");
   const claims = { ...receiptClaims(), extensions: { critical: {}, optional: { "com.example/text": "x".repeat(800_000) } } };
-  assert.deepEqual(await signReceipt(claims, handle, world.genesisView), { ok: false, error: "invalid_input", code: "limit_exceeded" });
+  assert.deepEqual(await signReceipt(claims, handle, world.genesisView), { ok: false, error: "invalid_input", code: "signing_input_invalid" });
   assert.equal(counts.signs, 0);
   const opts = { limits: { max_bytes: 2_097_152, max_string_bytes: 1_048_576 } };
   const result = await signReceipt(claims, handle, world.genesisView, opts);
@@ -1772,14 +1774,14 @@ test("undefined option axes retain the verifier's defaults", async () => {
   assert.deepEqual(counts, { identities: 4, signs: 4 });
 });
 
-test("claims copies stop repeated trees at the caller's byte limit", async () => {
+test("claims copies stop repeated trees beyond the largest verifier limits", async () => {
   const { handle, counts } = callbackCounts(11, "issuer-key-001");
   let reads = 0;
   let tree: unknown = Object.defineProperty({}, "value", { enumerable: true, get() {
     reads += 1;
     return "entry";
   } });
-  for (let depth = 0; depth < 20; depth += 1) tree = { left: tree, right: tree };
+  for (let depth = 0; depth < 24; depth += 1) tree = { left: tree, right: tree };
   const claims = {
     ...genesisClaims("Ed25519", "issuer-key-001", derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey)),
     extensions: { critical: {}, optional: { "com.example/tree": tree } },
@@ -1787,8 +1789,8 @@ test("claims copies stop repeated trees at the caller's byte limit", async () =>
   const started = performance.now();
   const result = await signDescriptor(claims, handle, { limits: { max_bytes: 1_024 } });
   process.stdout.write(`Repeated claims copy: ${(performance.now() - started).toFixed(1)} ms, ${reads} leaf reads, ${JSON.stringify(result)}.\n`);
-  assert.deepEqual(result, { ok: false, error: "invalid_input", code: "limit_exceeded" });
-  assert.ok(reads < 1_024, String(reads));
+  assert.deepEqual(result, { ok: false, error: "invalid_input", code: "signing_input_invalid" });
+  assert.ok(reads < MAXIMUM_LIMITS.max_bytes / 16, String(reads));
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
@@ -1802,7 +1804,7 @@ test("claims copies bound 200000 levels without overflowing the stack", async ()
   };
   for (const max_depth of [64, 128]) {
     assert.deepEqual(await signDescriptor(claims, handle, { limits: { max_depth } }),
-      { ok: false, error: "invalid_input", code: "limit_exceeded" });
+      { ok: false, error: "invalid_input", code: "signing_input_invalid" });
   }
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
@@ -1828,12 +1830,12 @@ test("claims copy bounds match JSON depth, members, items and UTF-8 strings", as
     const result = await signDescriptor(claims, handle, { limits });
     assert.ok(result.ok, `${label}: ${JSON.stringify(result)}`);
     assert.deepEqual(await signDescriptor(claims, handle, { limits: lower }),
-      { ok: false, error: "invalid_input", code: "limit_exceeded" }, label);
-    assert.deepEqual(counts, { identities: 1, signs: 1 });
+      { ok: false, error: "invalid_input", code: "signing_input_invalid" }, label);
+    assert.deepEqual(counts, { identities: 2, signs: 1 });
   });
 });
 
-test("copy byte bounds count escaped JSON before reading later members", async () => {
+test("claims below the entry guard read later members before preparation", async () => {
   let reads = 0;
   const value = Object.defineProperty({ first: "\u0000".repeat(128) }, "later", { enumerable: true, get() {
     reads += 1;
@@ -1847,9 +1849,9 @@ test("copy byte bounds count escaped JSON before reading later members", async (
       kind === "receipt" ? await signReceipt(input, handle, world.genesisView, options) :
       kind === "acceptance" ? await signAcceptance(input, handle, world.genesisView, options) :
       await signTermination(input, handle, world.genesisView, options);
-    assert.deepEqual(result, { ok: false, error: "invalid_input", code: "limit_exceeded" }, kind);
+    assert.deepEqual(result, { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
   }
-  assert.equal(reads, 0);
+  assert.equal(reads, 4);
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
@@ -1884,3 +1886,18 @@ test("deep JSON option values reach the verifier without a recursive copy", asyn
   }
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
+
+test("small final compact limits return the verifier code after one snapshot", async () => {
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = genesisClaims("Ed25519", "issuer-key-001", publicKey);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const max_bytes of [200, 100, 50]) {
+    const options = { limits: { max_bytes } };
+    const checked = prepareSigning("descriptor", "issuer-key-001", claims, publicKey, null, options);
+    assert.deepEqual(checked, { ok: false, code: "signing_input_invalid" });
+    assert.deepEqual(await signDescriptor(claims, handle, options),
+      { ok: false, error: "invalid_input", code: checked.code });
+  }
+  assert.deepEqual(counts, { identities: 3, signs: 0 });
+});
+

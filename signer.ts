@@ -6,6 +6,7 @@
 
 import {
   DEFAULT_LIMITS,
+  MAXIMUM_LIMITS,
   defaultEmissionName,
   decodeCharterRevision,
   emissions,
@@ -244,9 +245,15 @@ async function signPrepared(
   try {
     retained = kind === "descriptor" ? options.predecessor ?? null :
       typeof context === "string" ? context : copyChainView(context as ChainView, copyLimits);
-    claims = copyClaims(claims, { limits: copyLimits });
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
+  }
+  try {
+    // Caller limits belong to preparation. The entry guard only stops values
+    // beyond every JSON limit the verifier can accept.
+    claims = copyClaims(claims, { limits: MAXIMUM_LIMITS });
+  } catch (fault) {
+    return { error: "invalid_input", code: fault === COPY_LIMIT ? "signing_input_invalid" : "invalid_type" };
   }
   const snapshot = await resolveKeyIdentity(keyHandle);
   if ("error" in snapshot) return snapshot;
