@@ -1,0 +1,11 @@
+title = "charter_agreement_signer_typescript gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The shared signer table holds signed public test artifacts minted from public test seeds, not credentials"
+targetRules = ["jwt"]
+paths = [
+  '''^test/fixtures/signer_cases\.json$'''
+]

@@ -3,7 +3,7 @@
 All notable public changes to `@charter-agreement-protocol/signer` are
 documented here.
 
-## [Unreleased]
+## [0.3.0] — October 14, 2026
 
 ### Breaking
 
@@ -62,7 +62,7 @@ documented here.
   asserted on rejection. The browser bundle test runs the complete workshop flow.
 - Include `SECURITY.md`, `CODE_OF_CONDUCT.md`, and `CONTRIBUTING.md` in the
   npm package with this package's reporting and contribution practices.
-- Run the shared Elixir signer table from `dab4d86`, copied byte for byte with
+- Run the shared signer table from `charter_agreement_signer` 0.5.0, copied byte for byte with
   a SHA-256 check. All 121 rows use real seed keys and compare result shapes,
   codes, snapshot counts, and custody counts. Twelve Ed25519 successes match
   exact compacts; five ML-DSA-65 successes pass public verification. The explicit
@@ -74,8 +74,8 @@ documented here.
 - Delegate preparation and completion to verifier 0.7.0's `prepareSigning`
   and `finishSigning`; remove the signer's context derivation,
   producer calls, assembly calls, and choice of post-sign verification function.
-- Use the frozen verifier 0.7.0 build at `3464ee0`. Its preparation corpus uses
-  the public input shapes, and signing plans can only be made through
+- Require `@charter-agreement-protocol/verifier` ^0.7.0. Its signing preparation
+  corpus uses the public input shapes, and signing plans can only be made through
   `prepareSigning`. The signer already uses that path.
 - Accept signature bytes from any JavaScript realm, including Buffer and plain
   `Uint8Array`. Ed25519 snapshot keys with noncanonical y coordinates, no curve

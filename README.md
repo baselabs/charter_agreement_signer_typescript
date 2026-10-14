@@ -20,9 +20,8 @@ The signer checks the signature against the snapshot public key, then calls
 npm install @charter-agreement-protocol/signer
 ```
 
-Version **0.3.0** requires Node >= 24.8.0 and the verifier 0.7.0 pre-sign API.
-This checkout uses the frozen verifier build at `file:../ts-verifier-070-rc`
-(commit `3464ee0`).
+Version **0.3.0** requires Node >= 24.8.0 and
+`@charter-agreement-protocol/verifier` ^0.7.0, for its pre-sign API.
 
 ## Quickstart
 
@@ -223,7 +222,7 @@ resolution, and the closed error vocabulary.
   flow. It cannot verify ML-DSA-65 and refuses that request before signing with
   the top-level `algorithm_unsupported_on_substrate` error.
 - The [shared table](test/fixtures/README.md) runs all 121 rows from the Elixir
-  signer at `dab4d86`, with its exact source bytes pinned by SHA-256. Real seed
+  signer, `charter_agreement_signer` 0.5.0, with its exact source bytes pinned by SHA-256. Real seed
   keys check result shapes and codes, snapshot and custody counts, 12 exact
   Ed25519 success compacts, and five ML-DSA-65 successes through verification.
   All 121 rows run in both Node and the browser bundle with no skips. Eight

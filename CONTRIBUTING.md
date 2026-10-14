@@ -53,7 +53,7 @@ plain messages unless the maintainer asks otherwise. Do not use `git stash`.
 - Search for tests of the old contract before changing behavior.
 
 The local suite runs the [shared signer table](test/fixtures/README.md)
-against this checkout's frozen TypeScript verifier build. It compares recorded
+against the TypeScript verifier this checkout installs. It compares recorded
 Elixir outcomes and exact Ed25519 compacts with real seed keys, then checks
 every success through verification. It does not execute Elixir locally.
 Keep the source table byte for byte and report disagreements with both outcomes.
