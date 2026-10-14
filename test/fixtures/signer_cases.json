@@ -3242,26 +3242,21 @@
     },
     {
       "claims": {
-        "charter_id": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
+        "charter_id": "sha-256:Q-Qbi1zkMpvKxf-rLCTC1BKNjqa9vISAtl1gZYbUaps",
         "effective_at": "2026-08-26T13:00:00Z",
-        "governing_revision_digest": "sha-256:DBHidEL4ZB5BFrkWpVGWdX-8fErr2GmFKyxjCVgKIQE",
-        "issued_at": "2026-08-25T13:00:00Z",
+        "governing_revision_digest": "sha-256:Q-Qbi1zkMpvKxf-rLCTC1BKNjqa9vISAtl1gZYbUaps",
+        "issued_at": "2026-08-25T13:01:00Z",
         "party_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
         "party_role": "issuer",
         "protocol_revision": 2,
         "reason_code": "mutual"
       },
-      "context": "ml-context-ed-request",
+      "context": "profile-counterparty",
       "expected": {
-        "code": "signing_refused",
-        "custody_called": false,
-        "shape": "refused",
-        "snapshot_called": true
-      },
-      "expected_limited": {
-        "code": "algorithm_unsupported_on_substrate",
-        "custody_called": false,
-        "shape": "algorithm_unsupported_on_substrate",
+        "code": null,
+        "compact": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleSIsInR5cCI6ImNhcCt0ZXJtaW5hdGlvbiJ9.eyJjaGFydGVyX2lkIjoic2hhLTI1NjpRLVFiaTF6a01wdkt4Zi1yTENUQzFCS05qcWE5dklTQXRsMWdaWWJVYXBzIiwiZWZmZWN0aXZlX2F0IjoiMjAyNi0wOC0yNlQxMzowMDowMFoiLCJnb3Zlcm5pbmdfcmV2aXNpb25fZGlnZXN0Ijoic2hhLTI1NjpRLVFiaTF6a01wdkt4Zi1yTENUQzFCS05qcWE5dklTQXRsMWdaWWJVYXBzIiwiaXNzdWVkX2F0IjoiMjAyNi0wOC0yNVQxMzowMTowMFoiLCJwYXJ0eV9kZXNjcmlwdG9yX2RpZ2VzdCI6InNoYS0yNTY6TjA1VWE5OWhvWHhObkFsQ1l1d19wdGhjMjJtMGJmUGl3LUlVdmFHNVU0QSIsInBhcnR5X3JvbGUiOiJpc3N1ZXIiLCJwcm90b2NvbF9yZXZpc2lvbiI6MiwicmVhc29uX2NvZGUiOiJtdXR1YWwifQ.clPWF9nfh-I1ICOIFxeBrYgSmGC0SYNIjJ_13ibo-wbkcipMGXBeHh74ZmgJRFX29PIq-tUu0XG2nfPltivFDA",
+        "custody_called": true,
+        "shape": "ok",
         "snapshot_called": true
       },
       "id": "termination-excluded-context",
@@ -3281,7 +3276,7 @@
     },
     {
       "claims": {
-        "accepted_at": "2026-08-25T13:00:00Z",
+        "accepted_at": "2026-08-25T13:01:00Z",
         "charter_id": "sha-256:Q-Qbi1zkMpvKxf-rLCTC1BKNjqa9vISAtl1gZYbUaps",
         "party_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
         "party_role": "issuer",
@@ -3289,10 +3284,10 @@
         "revision_digest": "sha-256:Q-Qbi1zkMpvKxf-rLCTC1BKNjqa9vISAtl1gZYbUaps",
         "revision_number": 1
       },
-      "context": "profile-counterparty",
+      "context": "profile-counterparty-pending",
       "expected": {
         "code": null,
-        "compact": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleSIsInR5cCI6ImNhcCthY2NlcHRhbmNlIn0.eyJhY2NlcHRlZF9hdCI6IjIwMjYtMDgtMjVUMTM6MDA6MDBaIiwiY2hhcnRlcl9pZCI6InNoYS0yNTY6US1RYmkxemtNcHZLeGYtckxDVEMxQktOanFhOXZJU0F0bDFnWlliVWFwcyIsInBhcnR5X2Rlc2NyaXB0b3JfZGlnZXN0Ijoic2hhLTI1NjpOMDVVYTk5aG9YeE5uQWxDWXV3X3B0aGMyMm0wYmZQaXctSVV2YUc1VTRBIiwicGFydHlfcm9sZSI6Imlzc3VlciIsInByb3RvY29sX3JldmlzaW9uIjoyLCJyZXZpc2lvbl9kaWdlc3QiOiJzaGEtMjU2OlEtUWJpMXprTXB2S3hmLXJMQ1RDMUJLTmpxYTl2SVNBdGwxZ1pZYlVhcHMiLCJyZXZpc2lvbl9udW1iZXIiOjF9.Le_vLTDYNgcdp_X69Zx4FJKPWTRo_z84a_TOyazc_8bUVfDHadta4Jof2aOrVxnJMkxFlj7HjxuKtrI6Ck4WAg",
+        "compact": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleSIsInR5cCI6ImNhcCthY2NlcHRhbmNlIn0.eyJhY2NlcHRlZF9hdCI6IjIwMjYtMDgtMjVUMTM6MDE6MDBaIiwiY2hhcnRlcl9pZCI6InNoYS0yNTY6US1RYmkxemtNcHZLeGYtckxDVEMxQktOanFhOXZJU0F0bDFnWlliVWFwcyIsInBhcnR5X2Rlc2NyaXB0b3JfZGlnZXN0Ijoic2hhLTI1NjpOMDVVYTk5aG9YeE5uQWxDWXV3X3B0aGMyMm0wYmZQaXctSVV2YUc1VTRBIiwicGFydHlfcm9sZSI6Imlzc3VlciIsInByb3RvY29sX3JldmlzaW9uIjoyLCJyZXZpc2lvbl9kaWdlc3QiOiJzaGEtMjU2OlEtUWJpMXprTXB2S3hmLXJMQ1RDMUJLTmpxYTl2SVNBdGwxZ1pZYlVhcHMiLCJyZXZpc2lvbl9udW1iZXIiOjF9.v-BZD5PsoLUPuMqk1YtJ7rSxWJr4hRam__e3i_-chnF4mowm57bfBCJ7swI3DjrapDkTMR6FvatHIrWMLgxwAQ",
         "custody_called": true,
         "shape": "ok",
         "snapshot_called": true
@@ -4031,6 +4026,20 @@
       ],
       "terminations": [],
       "type": "chain"
+    },
+    "profile-counterparty-pending": {
+      "acceptances": [
+        "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiYWNjZXB0b3Ita2V5IiwidHlwIjoiY2FwK2FjY2VwdGFuY2UifQ.eyJhY2NlcHRlZF9hdCI6IjIwMjYtMDgtMjVUMTM6MDA6MDBaIiwiY2hhcnRlcl9pZCI6InNoYS0yNTY6US1RYmkxemtNcHZLeGYtckxDVEMxQktOanFhOXZJU0F0bDFnWlliVWFwcyIsInBhcnR5X2Rlc2NyaXB0b3JfZGlnZXN0Ijoic2hhLTI1NjpQcld5U0pfaUNRektDQ29aSmlSa01GNnVSSUc2U01lQThKclhfeHVFSFNrIiwicGFydHlfcm9sZSI6ImFjY2VwdG9yIiwicHJvdG9jb2xfcmV2aXNpb24iOjIsInJldmlzaW9uX2RpZ2VzdCI6InNoYS0yNTY6US1RYmkxemtNcHZLeGYtckxDVEMxQktOanFhOXZJU0F0bDFnWlliVWFwcyIsInJldmlzaW9uX251bWJlciI6MX0.ukXANRJWzNXgPdlHoHPl8I0himkzpbMkTCXxWhKsZo8dnO8peCX1q2qc-Ss_1h9EYKnOlJlm5bT8npbSWLWkAA"
+      ],
+      "descriptors": [
+        "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleSIsInR5cCI6ImNhcCtwYXJ0eSJ9.eyJhdHRlc3RhdGlvbl9oaW50cyI6W10sImRlc2NyaXB0b3JfbnVtYmVyIjoxLCJlZmZlY3RpdmVfZnJvbSI6IjIwMjYtMDgtMjVUMTA6MDA6MDBaIiwiZXh0ZW5zaW9ucyI6eyJjcml0aWNhbCI6e30sIm9wdGlvbmFsIjp7fX0sInByb3RvY29sX3JldmlzaW9uIjoyLCJ2ZXJpZmljYXRpb25fa2V5cyI6W3siYWxnb3JpdGhtIjoiRWQyNTUxOSIsImtleV9pZCI6Imlzc3Vlci1rZXkiLCJwdWJsaWNfa2V5IjoiaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxdyIsInN0YXR1cyI6ImFjdGl2ZSJ9XX0.Ko7A7MJcvfYGVbLMlE0R2Z6mw5ooujCVKG5uUyAD_CVrFnNzr4WFn2Nh7xgrPBPXmgPcf1ccEkkHh6lgzm5gBw",
+        "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjY2VwdG9yLWtleSIsInR5cCI6ImNhcCtwYXJ0eSJ9.eyJhdHRlc3RhdGlvbl9oaW50cyI6W10sImRlc2NyaXB0b3JfbnVtYmVyIjoxLCJlZmZlY3RpdmVfZnJvbSI6IjIwMjYtMDgtMjVUMTA6MDA6MDBaIiwiZXh0ZW5zaW9ucyI6eyJjcml0aWNhbCI6e30sIm9wdGlvbmFsIjp7fX0sInByb3RvY29sX3JldmlzaW9uIjoxLCJ2ZXJpZmljYXRpb25fa2V5cyI6W3siYWxnb3JpdGhtIjoiRWQyNTUxOSIsImtleV9pZCI6ImFjY2VwdG9yLWtleSIsInB1YmxpY19rZXkiOiJnVGwzRHFoOUYxOVdvMVJtdzB4LXpNdU5pcEcwN2plaVhmWVBXNF9KczVRIiwic3RhdHVzIjoiYWN0aXZlIn1dfQ.JHWqac9rIYjPoP_p5qTvBwKSzIRhqQt5s9MtUq7EsnE4ZffCeNImyVQ1gAoFV5l4atA9kEWYH43Q60XBNM_RDA"
+      ],
+      "revisions": [
+        "{\"abp_bindings\":[{\"blueprint_id\":\"example.demo/echo\",\"content_digest\":\"sha-256:b1Aw4cU5AbV9k8bdbZkRCsySDHGpTAwB-aQm57Wh7B8\",\"deployment_digest\":\"sha-256:tWFr0caS0AWFJd2UcB9gZv3kNjIUP8xZ08WWM_h8xgo\",\"party_role\":\"issuer\",\"release_number\":1}],\"attribution_declaration\":{\"basis\":\"bound_deployments\"},\"effective_from\":\"2026-08-25T12:00:00Z\",\"extensions\":{\"critical\":{},\"optional\":{}},\"legal_text\":{\"content_digest\":\"sha-256:rOsX8yhe4WWaAg6MmDYwtNiUVPzAN-A2a-CK4atH7yg\",\"media_type\":\"text/plain\",\"uri_hint\":\"https://example.com/charter.txt\"},\"parties\":[{\"party_descriptor_digest\":\"sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A\",\"role\":\"issuer\"},{\"party_descriptor_digest\":\"sha-256:PrWySJ_iCQzKCCoZJiRkMF6uRIG6SMeA8JrX_xuEHSk\",\"role\":\"acceptor\"}],\"precedence_declaration\":\"legal_text_governs\",\"protocol_revision\":2,\"receipt_profile\":\"com.example.charter/default\",\"revision_number\":1,\"termination_rules\":{\"reason_codes\":[\"mutual\",\"breach\"]}}"
+      ],
+      "terminations": [],
+      "type": "set"
     },
     "profile-own-chain": {
       "acceptances": [

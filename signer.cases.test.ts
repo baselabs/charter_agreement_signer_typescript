@@ -56,7 +56,7 @@ for (const row of sharedTable.cases) {
 
 after(() => {
   assert.equal(runRows, expectedRunRows);
-  assert.equal(edSuccesses, 12);
+  assert.equal(edSuccesses, 13);
   assert.equal(mlSuccesses, 5);
   process.stdout.write(`Shared table: ${runRows} run, ${Object.keys(unexpressibleRows).length} unexpressible, ${edSuccesses} exact Ed25519 successes, ${mlSuccesses} verified ML-DSA-65 successes.\n`);
 });
