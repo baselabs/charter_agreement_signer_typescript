@@ -54,7 +54,7 @@ export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPrede
 
 const COPY_LIMIT = Symbol("copy limit");
 const ARTIFACT_LISTS = new Set(["revisions", "acceptances", "descriptors", "terminations", "lineage"]);
-type CopySettings = { limits?: Limits; context?: boolean };
+type CopySettings = { limits?: Limits; context?: boolean; predecessor?: boolean };
 type CopyFrame = {
   source: object;
   target: Record<string, unknown> | unknown[];
@@ -67,7 +67,7 @@ type CopyFrame = {
 
 // Read one child at a time without recursion or array constructor hooks.
 // Only ancestors are retained, so repeated objects get separate copies.
-function copyClaims<T>(value: T, { limits, context = false }: CopySettings = {}): T {
+function copyClaims<T>(value: T, { limits, context = false, predecessor = false }: CopySettings = {}): T {
   const ancestors = new WeakSet<object>();
   const frames: CopyFrame[] = [];
   let bytes = 0;
@@ -107,7 +107,8 @@ function copyClaims<T>(value: T, { limits, context = false }: CopySettings = {})
     }
     const size = array ? item.length : keys!.length;
     if (!Number.isSafeInteger(size) || size < 0) throw new TypeError("invalid_type");
-    if (limits && size > (array ? artifacts ? limits.max_artifact_set_items : limits.max_array_items : limits.max_object_members)) {
+    if (limits && !(array && artifacts && predecessor) &&
+        size > (array ? artifacts ? limits.max_artifact_set_items : limits.max_array_items : limits.max_object_members)) {
       throw COPY_LIMIT;
     }
     addBytes(2 + Math.max(0, size - 1));
@@ -223,7 +224,7 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     if (!descriptor) return { ...settings, algorithm };
     const previous = supplied.predecessor;
     const predecessor = previous === undefined ? previous : copyClaims(previous, {
-      limits: { ...DEFAULT_LIMITS, ...settings.limits }, context: true,
+      limits: MAXIMUM_LIMITS, context: true, predecessor: true,
     });
     return { ...settings, algorithm, predecessor: predecessor as DescriptorPredecessor | undefined };
   } catch (fault) {
@@ -254,7 +255,7 @@ async function signPrepared(
 ): Promise<{ compact: string } | SignError> {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
-  const copyLimits = { ...DEFAULT_LIMITS, ...options.limits };
+  const copyLimits = MAXIMUM_LIMITS;
   let retained: DescriptorPredecessor | ChainView | string | null;
   try {
     retained = kind === "descriptor" ? options.predecessor ?? null :

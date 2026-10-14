@@ -18,6 +18,7 @@ import {
   canonical,
   prepareSigning,
   MAXIMUM_LIMITS,
+  type SigningKind,
   decodeCharterRevision,
   decodeJsonText,
   descriptorSigningInput,
@@ -1867,7 +1868,7 @@ test("claims below the entry guard read later members before preparation", async
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
-test("context copies stop oversized artifact lists before reading entries", async () => {
+test("context entry copies read lists below the verifier maximum", async () => {
   let reads = 0;
   const acceptances = Object.defineProperty(Array<string>(2), "0", { get() {
     reads += 1;
@@ -1880,8 +1881,8 @@ test("context copies stop oversized artifact lists before reading entries", asyn
     await signReceipt(receiptClaims(), handle, chain, options),
     await signAcceptance(world.genesisIssuerClaims, handle, chain, options),
     await signTermination({}, handle, chain, options),
-  ]) assert.deepEqual(result, { ok: false, error: "invalid_input", code: "limit_exceeded" });
-  assert.equal(reads, 0);
+  ]) assert.deepEqual(result, { ok: false, error: "invalid_input", code: "invalid_type" });
+  assert.equal(reads, 3);
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
@@ -1958,4 +1959,46 @@ test("inherited options and nested option records match their plain values", asy
   assert.deepEqual(checked, { ok: false, code: "algorithm_outside_profile" });
   assert.deepEqual(await signDescriptor(claims, handle, options), { ok: false, error: "invalid_input", code: checked.code });
   assert.deepEqual(counts, { identities: 5, signs: 4 });
+});
+
+
+test("predecessor lineage is independent of the caller's artifact item limit", async () => {
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = genesisClaims("Ed25519", "issuer-key-001", publicKey);
+  const { handle } = callbackCounts(11, "issuer-key-001");
+  const root = await signDescriptor(claims, handle);
+  assert.ok(root.ok);
+  const first = verifyDescriptor(root.result.descriptor);
+  assert.ok(first.ok);
+  const next = await signDescriptor({ ...claims, descriptor_number: 2, party_id: first.facts.party_id,
+    prev_descriptor_digest: first.facts.descriptor_digest }, handle, { predecessor: first.facts });
+  assert.ok(next.ok, JSON.stringify(next));
+  const previous = verifyDescriptor(next.result.descriptor, first.facts);
+  assert.ok(previous.ok);
+  assert.equal(previous.facts.lineage.length, 2);
+  const successor = { ...claims, descriptor_number: 3, party_id: previous.facts.party_id,
+    prev_descriptor_digest: previous.facts.descriptor_digest };
+  for (const max_artifact_set_items of [0, 1]) {
+    const options = { limits: { max_artifact_set_items, max_array_items: 1 } };
+    const prepared = prepareSigning("descriptor", "issuer-key-001", successor, publicKey, previous.facts, options);
+    assert.ok(prepared.ok, JSON.stringify(prepared));
+    const signed = await signDescriptor(successor, handle, { ...options, predecessor: previous.facts });
+    assert.ok(signed.ok, JSON.stringify(signed));
+    assert.ok(verifyDescriptor(signed.result.descriptor, previous.facts).ok);
+  }
+});
+
+test("the verifier checks claims before the caller's context item limit", async () => {
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const options = { limits: { max_artifact_set_items: 1 } };
+  for (const { kind, claims, call } of signingCalls(handle)) {
+    if (kind === "descriptor") continue;
+    const input = kind === "termination" ? {} : claims;
+    const checked = prepareSigning(kind as SigningKind, "issuer-key-001", input, publicKey, world.genesisView, options);
+    assert.ok(!checked.ok);
+    const result = kind === "termination" ? await signTermination(input, handle, world.genesisView, options) : await call(options);
+    assert.deepEqual(result, { ok: false, error: "invalid_input", code: checked.code }, kind);
+  }
+  assert.deepEqual(counts, { identities: 3, signs: 0 });
 });
