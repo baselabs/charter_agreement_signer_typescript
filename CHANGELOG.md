@@ -81,11 +81,13 @@ documented here.
   `Uint8Array`. Ed25519 snapshot keys with noncanonical y coordinates, no curve
   point, x = 0 with the sign bit set, or small order return `invalid_key_handle`.
   Invalid descriptor claim keys can fail earlier with `signing_input_invalid`.
-  Sparse profile algorithm lists reject during the signer's JSON entry copy
-  with `invalid_input`/`invalid_type`, before either key callback.
+  The verifier checks option values before either key callback. Sparse profile
+  algorithm lists return `invalid_input`/`invalid_profile`; nonfinite or
+  explicitly undefined limit values return `invalid_input`/`invalid_limits`.
 - Structurally copy claims, context, limits, profile, and predecessor before
   the first `await`, including Proxy-backed plain objects and repeated objects.
-  Copies contain fresh plain JSON values. Class instances, other non-JSON
+  Copies contain fresh plain objects and arrays. Option scalars retain
+  `undefined` and nonfinite numbers for the verifier to check. Class instances, other non-JSON
   values, cycles, and throwing getters return `invalid_input`/`invalid_type`.
   Array copies do not call subclass constructor hooks.
 - Resolve limits, then profile, then algorithm, before taking the key snapshot.

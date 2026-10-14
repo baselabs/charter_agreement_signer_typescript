@@ -52,11 +52,14 @@ export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPrede
 // Copy JSON values through ordinary property reads, including Proxy-backed
 // plain objects. Track only ancestors so repeated objects get separate copies.
 // Array indices go into a plain array without reading a constructor hook.
-function copyClaims<T>(value: T): T {
+function copyClaims<T>(value: T, optionValues = false): T {
   const ancestors = new WeakSet<object>();
   const copy = (item: unknown): unknown => {
     if (item === null || typeof item === "string" || typeof item === "boolean") return item;
-    if (typeof item === "number" && Number.isFinite(item)) return item;
+    // Option scalars, including undefined and nonfinite numbers, stay intact
+    // so the verifier can apply its own validity checks and defaults.
+    if (optionValues && item === undefined) return item;
+    if (typeof item === "number" && (optionValues || Number.isFinite(item))) return item;
     if (typeof item !== "object" || ancestors.has(item)) throw new TypeError("invalid_type");
     ancestors.add(item);
     try {
@@ -108,7 +111,7 @@ type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: strin
 function readOption(opts: Record<string, unknown>, key: string): { value: unknown } | SignError {
   try {
     const value = opts[key];
-    return { value: value === undefined || key === "algorithm" ? value : copyClaims(value) };
+    return { value: value === undefined || key === "algorithm" ? value : copyClaims(value, key !== "predecessor") };
   } catch (_getter) {
     return { error: "invalid_input", code: "invalid_type" };
   }

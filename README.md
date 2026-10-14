@@ -92,7 +92,8 @@ claimed revision and the holder's own descriptor history from its verified
 contents. The signer structurally copies claims, context, limits, profile,
 and predecessor at entry, before awaiting a key callback. Copies contain
 fresh plain JSON objects and arrays, strings, finite numbers, booleans, and
-null. Repeated objects are copied separately. Class instances, other non-JSON
+null. Option scalars retain `undefined` and nonfinite numbers for the verifier
+to check. Repeated objects are copied separately. Class instances, other non-JSON
 values, cycles, and throwing getters return `invalid_input`/`invalid_type`.
 
 Migration from the previous issuing view:
@@ -131,8 +132,9 @@ unknown key, a `Map`, a class instance, or a throwing getter returns
 `limits` is the verifier's `Partial<Limits>` and `profile` is its `Profile`.
 Malformed JSON values return `invalid_input` with `invalid_limits` or
 `invalid_profile`, in that order, before the algorithm or key snapshot is
-resolved. Sparse profile algorithm lists are non-JSON values and return
-`invalid_input`/`invalid_type` during the entry copy, before either callback.
+resolved. Option copies preserve scalar values and missing array entries for
+the verifier to check. Sparse profile algorithm lists return `invalid_profile`;
+nonfinite or explicitly undefined limit values return `invalid_limits`.
 Limits bound the final compact, including signature bytes, and
 every context artifact read; raised limits also apply to assembly and the
 custody guard. Profiles can restrict `algorithms` and/or

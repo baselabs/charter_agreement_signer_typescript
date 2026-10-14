@@ -16,6 +16,7 @@ import {
 } from "./signer.ts";
 import {
   canonical,
+  decodeCharterRevision,
   descriptorSigningInput,
   acceptanceSigningInput,
   terminationSigningInput,
@@ -1701,7 +1702,38 @@ test("sparse profile algorithm lists reject before either key callback", async (
   const { handle, counts } = callbackCounts(11, "issuer-key-001");
   for (const { kind, call } of signingCalls(handle)) {
     assert.deepEqual(await call({ profile: { algorithms } }),
-      { ok: false, error: "invalid_input", code: "invalid_type" }, kind);
+      { ok: false, error: "invalid_input", code: "invalid_profile" }, kind);
     assert.deepEqual(counts, { identities: 0, signs: 0 });
   }
+});
+
+test("option copies preserve the verifier's invalid limits and profile codes", async (t) => {
+  const values = [
+    { limits: { max_bytes: NaN } },
+    { limits: { max_bytes: Infinity } },
+    { limits: { max_bytes: undefined } },
+    { profile: { revisions: { min: 2, max: undefined } } },
+    { profile: { algorithms: ["Ed25519", undefined] } },
+    { profile: { algorithms: ["Ed25519", null] } },
+  ];
+  for (const [index, opts] of values.entries()) await t.test(String(index), async () => {
+    const checked = decodeCharterRevision(undefined, opts as never);
+    assert.ok(!checked.ok);
+    assert.ok(checked.code === "invalid_limits" || checked.code === "invalid_profile");
+    const { handle, counts } = callbackCounts(11, "issuer-key-001");
+    for (const { kind, call } of signingCalls(handle)) {
+      assert.deepEqual(await call(opts as never),
+        { ok: false, error: "invalid_input", code: checked.code }, kind);
+    }
+    assert.deepEqual(counts, { identities: 0, signs: 0 });
+  });
+});
+
+test("undefined option axes retain the verifier's defaults", async () => {
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const { kind, call } of signingCalls(handle)) {
+    const result = await call({ limits: undefined, profile: { algorithms: undefined, revisions: undefined } });
+    assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
+  }
+  assert.deepEqual(counts, { identities: 4, signs: 4 });
 });
