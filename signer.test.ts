@@ -2002,3 +2002,35 @@ test("the verifier checks claims before the caller's context item limit", async 
   }
   assert.deepEqual(counts, { identities: 3, signs: 0 });
 });
+
+
+test("invalid algorithm list contents remain opaque for the verifier", async () => {
+  let value: unknown = "invalid";
+  for (let depth = 0; depth < 200; depth += 1) value = { child: value };
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = genesisClaims("Ed25519", "issuer-key-001", publicKey);
+  const options = { profile: { algorithms: ["Ed25519", "EdDSA", "ML-DSA-44", "ML-DSA-65", "ML-DSA-87", value] } };
+  const checked = decodeCharterRevision("", options as never);
+  assert.ok(!checked.ok);
+  assert.deepEqual(await signDescriptor(claims, handle, options as never),
+    { ok: false, error: "invalid_input", code: checked.code });
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
+});
+
+
+test("predecessor option records match the verifier's plain predecessor", async () => {
+  const previous = verifyDescriptor(world.issuer.descriptor);
+  assert.ok(previous.ok);
+  class Previous { constructor() { Object.assign(this, previous.ok && previous.facts); } }
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = { ...genesisClaims("Ed25519", "issuer-key-001", publicKey), descriptor_number: 2,
+    party_id: previous.facts.party_id, prev_descriptor_digest: previous.facts.descriptor_digest };
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  for (const predecessor of [new Previous(), Object.assign(new Map(), previous.facts), Object.create(previous.facts)]) {
+    const signed = await signDescriptor(claims, handle, { predecessor } as never);
+    assert.ok(signed.ok, JSON.stringify(signed));
+    assert.ok(verifyDescriptor(signed.result.descriptor, previous.facts).ok);
+  }
+  assert.deepEqual(counts, { identities: 3, signs: 3 });
+});

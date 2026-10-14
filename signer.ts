@@ -183,7 +183,8 @@ function optionAlgorithms(value: unknown): unknown {
   if (!Number.isSafeInteger(length) || length < 0) throw new TypeError("invalid_type");
   // A unique registry subset cannot be longer than the registry. Retain an
   // invalid length for the verifier without reading an unbounded caller list.
-  if (length > algorithmRegistry().length) return Array(Math.min(length, MAXIMUM_LIMITS.max_artifact_set_items + 1));
+  if (length > MAXIMUM_LIMITS.max_artifact_set_items) return Array(MAXIMUM_LIMITS.max_artifact_set_items + 1);
+  if (length > algorithmRegistry().length) return value;
   const result: unknown[] = [];
   for (let i = 0; i < length; i += 1) result.push(value[i]);
   return result;
@@ -223,9 +224,10 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     }
     if (!descriptor) return { ...settings, algorithm };
     const previous = supplied.predecessor;
-    const predecessor = previous === undefined ? previous : copyClaims(previous, {
-      limits: MAXIMUM_LIMITS, context: true, predecessor: true,
-    });
+    const predecessor = previous === undefined ? previous : copyClaims(
+      optionMembers(previous, ["digest", "descriptor_digest", "lineage"]), {
+        limits: MAXIMUM_LIMITS, context: true, predecessor: true,
+      });
     return { ...settings, algorithm, predecessor: predecessor as DescriptorPredecessor | undefined };
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
