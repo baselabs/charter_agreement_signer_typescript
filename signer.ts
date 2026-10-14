@@ -53,8 +53,7 @@ export type SigningOptions = {
 export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPredecessor | null };
 
 const COPY_LIMIT = Symbol("copy limit");
-const ARTIFACT_LISTS = new Set(["revisions", "acceptances", "descriptors", "terminations", "lineage"]);
-type CopySettings = { limits?: Limits; context?: boolean; predecessor?: boolean };
+
 type CopyFrame = {
   source: object;
   target: Record<string, unknown> | unknown[];
@@ -62,32 +61,30 @@ type CopyFrame = {
   size: number;
   index: number;
   depth: number;
-  artifacts: boolean;
 };
 
 // Read one child at a time without recursion or array constructor hooks.
 // Only ancestors are retained, so repeated objects get separate copies.
-function copyClaims<T>(value: T, { limits, context = false, predecessor = false }: CopySettings = {}): T {
+function copyClaims<T>(value: T): T {
+  const limits = MAXIMUM_LIMITS;
   const ancestors = new WeakSet<object>();
   const frames: CopyFrame[] = [];
   let bytes = 0;
   const addBytes = (size: number) => {
     bytes += size;
-    if (limits && bytes > limits.max_bytes) throw COPY_LIMIT;
+    if (bytes > limits.max_bytes) throw COPY_LIMIT;
   };
   const stringBytes = (text: string) => {
-    if (limits && Buffer.byteLength(text) > limits.max_string_bytes) throw COPY_LIMIT;
+    if (Buffer.byteLength(text) > limits.max_string_bytes) throw COPY_LIMIT;
     return Buffer.byteLength(JSON.stringify(text));
   };
-  const copy = (item: unknown, depth: number, artifacts = false, artifact = false): unknown => {
+  const copy = (item: unknown, depth: number): unknown => {
     if (item === null || typeof item === "boolean") {
       addBytes(item === null || item === true ? 4 : 5);
       return item;
     }
     if (typeof item === "string") {
-      // Context artifact text is immutable. The verifier checks its bytes
-      // per artifact and per set; JSON string limits apply to parsed claims.
-      addBytes(artifact ? 2 : stringBytes(item));
+      addBytes(stringBytes(item));
       return item;
     }
     if (typeof item === "number" && Number.isFinite(item)) {
@@ -95,7 +92,7 @@ function copyClaims<T>(value: T, { limits, context = false, predecessor = false 
       return item;
     }
     if (typeof item !== "object" || ancestors.has(item)) throw new TypeError("invalid_type");
-    if (limits && depth + 1 > limits.max_depth) throw COPY_LIMIT;
+    if (depth + 1 > limits.max_depth) throw COPY_LIMIT;
     const array = Array.isArray(item);
     let keys: string[] | null = null;
     if (!array) {
@@ -107,14 +104,13 @@ function copyClaims<T>(value: T, { limits, context = false, predecessor = false 
     }
     const size = array ? item.length : keys!.length;
     if (!Number.isSafeInteger(size) || size < 0) throw new TypeError("invalid_type");
-    if (limits && !(array && artifacts && predecessor) &&
-        size > (array ? artifacts ? limits.max_artifact_set_items : limits.max_array_items : limits.max_object_members)) {
+    if (size > (array ? limits.max_array_items : limits.max_object_members)) {
       throw COPY_LIMIT;
     }
     addBytes(2 + Math.max(0, size - 1));
     const target: Record<string, unknown> | unknown[] = array ? [] : Object.create(null);
     ancestors.add(item);
-    frames.push({ source: item, target, keys, size, index: 0, depth: depth + 1, artifacts });
+    frames.push({ source: item, target, keys, size, index: 0, depth: depth + 1 });
     return target;
   };
   const result = copy(value, 0);
@@ -129,17 +125,18 @@ function copyClaims<T>(value: T, { limits, context = false, predecessor = false 
     const key = frame.keys ? frame.keys[index] : String(index);
     if (frame.keys) addBytes(stringBytes(key) + 1);
     const child = (frame.source as Record<string, unknown>)[key];
-    const artifacts = context && frame.depth === 1 && frame.keys !== null && ARTIFACT_LISTS.has(key);
-    const copied = copy(child, frame.depth, artifacts, frame.artifacts);
+    const copied = copy(child, frame.depth);
     if (Array.isArray(frame.target)) frame.target.push(copied);
     else frame.target[key] = copied;
   }
   return result as T;
 }
 
-function copyChainView(chain: ChainView, limits: Limits): ChainView {
-  // An omitted context still reaches the verifier after the key snapshot.
-  return chain === undefined ? chain : copyClaims(chain, { limits, context: true });
+function copyChainView(chain: ChainView): ChainView {
+  const names = ["revisions", "acceptances", "descriptors", "terminations"];
+  const lists = Object.fromEntries(names.map((name) => [name, (value: unknown) =>
+    copyTextList(value, MAXIMUM_LIMITS.max_artifact_set_items + 1)]));
+  return optionMembers(chain, names, lists) as ChainView;
 }
 
 async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignError> {
@@ -190,6 +187,16 @@ function optionAlgorithms(value: unknown): unknown {
   return result;
 }
 
+function copyTextList(value: unknown, maximum = 2 ** 32 - 1): unknown {
+  if (!Array.isArray(value)) return value;
+  const length = value.length;
+  // A plain array cannot represent a length above 2^32 - 1.
+  if (!Number.isSafeInteger(length) || length < 0 || length > 2 ** 32 - 1) throw new TypeError("invalid_type");
+  const result: unknown[] = [];
+  for (let i = 0; i < Math.min(length, maximum); i += 1) result.push(value[i]);
+  return result;
+}
+
 function checkOptions(settings: SigningOptions): SignError | null {
   // Empty text always gives invalid_syntax after successful option checks.
   // Every earlier code comes from the verifier, including copy failures.
@@ -224,10 +231,9 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     }
     if (!descriptor) return { ...settings, algorithm };
     const previous = supplied.predecessor;
-    const predecessor = previous === undefined ? previous : copyClaims(
-      optionMembers(previous, ["digest", "descriptor_digest", "lineage"]), {
-        limits: MAXIMUM_LIMITS, context: true, predecessor: true,
-      });
+    const predecessor = optionMembers(previous, ["digest", "descriptor_digest", "lineage"], {
+      lineage: (value) => copyTextList(value),
+    });
     return { ...settings, algorithm, predecessor: predecessor as DescriptorPredecessor | undefined };
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
@@ -257,18 +263,17 @@ async function signPrepared(
 ): Promise<{ compact: string } | SignError> {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
-  const copyLimits = MAXIMUM_LIMITS;
   let retained: DescriptorPredecessor | ChainView | string | null;
   try {
     retained = kind === "descriptor" ? options.predecessor ?? null :
-      typeof context === "string" ? context : copyChainView(context as ChainView, copyLimits);
+      typeof context === "string" ? context : copyChainView(context as ChainView);
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
   try {
     // Caller limits belong to preparation. The entry guard only stops values
     // beyond every JSON limit the verifier can accept.
-    claims = copyClaims(claims, { limits: MAXIMUM_LIMITS });
+    claims = copyClaims(claims);
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "signing_input_invalid" : "invalid_type" };
   }

@@ -89,19 +89,23 @@ A `ChainView` contains four string arrays: `{ revisions, acceptances,
 descriptors, terminations }`. Pass all four, including explicit empty arrays.
 Acceptance and termination use this chain directly. The verifier derives the
 claimed revision and the holder's own descriptor history from its verified
-contents. The signer copies claims, context, and predecessor at entry, before
-awaiting a key callback. Those copies contain fresh plain JSON objects and
-arrays, strings, finite numbers, booleans, and null. Repeated objects are copied
-separately. Non-JSON claims and context, cycles, and throwing getters return
-`invalid_input`/`invalid_type`.
+contents. The signer copies claims at entry, before awaiting a key callback.
+Claims copies contain fresh plain JSON objects and arrays, strings, finite
+numbers, booleans, and null. Repeated objects are copied separately. Non-JSON
+claims, cycles, and throwing reads return `invalid_input`/`invalid_type`.
+Chain context and predecessor use their defined members with ordinary property
+reads, and retained artifact lists get fresh arrays. Valid members are immutable
+text; invalid member values stay opaque for the verifier.
 
 Claims copies use an iterative traversal guarded by the verifier's maximum
 supported JSON bounds, rather than the caller's limits. Values beyond those
 maximums return `invalid_input`/`signing_input_invalid`. Smaller claims reach
 `prepareSigning`, which owns all checks under caller limits, including final
-compact size. Context copies use the maximum supported bounds; predecessor
-lineage has no signer item limit. The verifier checks immutable artifact text
-under artifact byte limits, separately from parsed claims' string limits.
+compact size. Context list copies retain enough entries to exceed every
+supported artifact item limit, letting the verifier return its own result.
+Predecessor lineage has no signer item limit. The verifier checks immutable
+artifact text under artifact byte limits, separately from parsed claims' string
+limits.
 
 Migration from the previous issuing view:
 

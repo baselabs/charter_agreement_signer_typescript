@@ -84,9 +84,10 @@ documented here.
   The verifier checks option values before either key callback. Sparse profile
   algorithm lists return `invalid_input`/`invalid_profile`; nonfinite or
   explicitly undefined limit values return `invalid_input`/`invalid_limits`.
-- Copy claims, context, and predecessor into plain JSON before the first
-  `await`, without array constructor hooks. Claims entry guards use the
-  verifier's maximum JSON bounds. Caller limits and final compact size are
+- Copy claims into plain JSON before the first `await`, without array
+  constructor hooks. Read defined context and predecessor members once and
+  retain artifact lists for the verifier. Lineage arrays have no JSON bounds.
+  Claims entry guards use the verifier's maximum JSON bounds. Caller limits and final compact size are
   checked by `prepareSigning`; oversize claims return `signing_input_invalid`.
   Predecessor lineage has no signer item limit.
 - Read defined option members once with ordinary property access, including

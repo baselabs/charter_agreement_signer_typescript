@@ -2034,3 +2034,31 @@ test("predecessor option records match the verifier's plain predecessor", async 
   }
   assert.deepEqual(counts, { identities: 3, signs: 3 });
 });
+
+
+test("predecessor digest text reaches the verifier without a JSON string limit", async () => {
+  const previous = verifyDescriptor(world.issuer.descriptor);
+  assert.ok(previous.ok);
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = { ...genesisClaims("Ed25519", "issuer-key-001", publicKey), descriptor_number: 2,
+    party_id: previous.facts.party_id, prev_descriptor_digest: previous.facts.descriptor_digest };
+  const predecessor = { ...previous.facts, descriptor_digest: "x".repeat(MAXIMUM_LIMITS.max_string_bytes + 1) };
+  const checked = prepareSigning("descriptor", "issuer-key-001", claims, publicKey, predecessor);
+  assert.ok(!checked.ok);
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  assert.deepEqual(await signDescriptor(claims, handle, { predecessor }),
+    { ok: false, error: "invalid_input", code: checked.code });
+  assert.deepEqual(counts, { identities: 1, signs: 0 });
+});
+
+
+test("unused chain context members do not add a copy limit", async () => {
+  let value: unknown = "unused";
+  for (let depth = 0; depth < 40; depth += 1) value = { left: value, right: value };
+  const chain = { ...world.genesisView, extra: value };
+  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const signed = await signReceipt(receiptClaims(), handle, chain);
+  assert.ok(signed.ok, JSON.stringify(signed));
+  assert.ok(verifyReceipt(signed.result.receipt, chain).ok);
+  assert.deepEqual(counts, { identities: 1, signs: 1 });
+});
