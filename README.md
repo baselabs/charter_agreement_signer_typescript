@@ -146,13 +146,13 @@ custody guard. Profiles can restrict `algorithms` and/or
 `revisions: { min, max }`; an omitted axis keeps the full supported range.
 An EdDSA-only profile, an ML-DSA-44/87-only profile, or revisions 1..1 excludes
 every artifact this signer emits. Exclusions return `algorithm_outside_profile`
-or `revision_outside_profile`, whether they concern the new artifact or context.
+or `revision_outside_profile`.
 
 For acceptance and termination, the caller's profile covers the claimed
 revision, the signing party's own descriptor history, and the new artifact.
-The rest of the set is checked under the full default profile. A receipt's
-profile covers the whole retained set; a descriptor's covers its predecessor
-history.
+The rest of the set is checked under the full default profile. For receipts,
+the profile covers the new artifact and the whole retained set. For descriptors,
+it covers the new artifact and predecessor history.
 
 Errors are closed:
 
