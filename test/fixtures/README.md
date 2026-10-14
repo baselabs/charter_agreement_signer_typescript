@@ -5,7 +5,7 @@ source commit and SHA-256 are recorded once in
 [`SHARED_SOURCE`](../signer-cases.ts). The digest covers whitespace as well as
 JSON values. These seeds are public test material.
 
-Run `npm run test:cases` for all 122 Node rows. The runner is
+Run `npm run test:cases` for all 121 Node rows. The runner is
 [`signer.cases.test.ts`](../../signer.cases.test.ts); its empty
 `unexpressibleRows` map is the explicit list of Elixir-only shapes, keyed by
 row id with a reason. This table has no such rows. The run count is asserted,
@@ -31,11 +31,11 @@ the same four artifact arrays after public verification; Elixir retains a
 verified struct. Raw set contexts pass the four arrays directly.
 
 The browser bundle test uses `expected_limited` where present and the normal
-expectation otherwise. It runs 120 rows, compares 13 exact Ed25519 successes,
-and checks six substrate errors with zero custody calls. It reports
-`ml-successor-ok` and `ml-successor-wrong` as missing `expected_limited` and
-skips those two rows so the source table can add their expectations. It checks
-result shapes and callback counts and verifies each success in the bundle.
+expectation otherwise. It runs all 121 rows with no skips, compares 12 exact
+Ed25519 successes, and checks eight substrate errors with zero custody calls.
+Both `ml-successor-ok` and `ml-successor-wrong` use their `expected_limited`
+substrate errors with one snapshot and zero custody calls. It checks result
+shapes and callback counts and verifies each success in the bundle.
 The full table runs in Node 24.8.0 and the current Node 24 line. A mismatch
 prints both the Elixir expectation and TS result and counts. The source table
 is never adjusted to make a mismatch pass.

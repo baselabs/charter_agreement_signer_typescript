@@ -62,8 +62,8 @@ documented here.
   asserted on rejection. The browser bundle test runs the complete workshop flow.
 - Include `SECURITY.md`, `CODE_OF_CONDUCT.md`, and `CONTRIBUTING.md` in the
   npm package with this package's reporting and contribution practices.
-- Run the shared Elixir signer table from `b211f3c`, copied byte for byte with
-  a SHA-256 check. All 118 rows use real seed keys and compare result shapes,
+- Run the shared Elixir signer table from `dab4d86`, copied byte for byte with
+  a SHA-256 check. All 121 rows use real seed keys and compare result shapes,
   codes, snapshot counts, and custody counts. Twelve Ed25519 successes match
   exact compacts; five ML-DSA-65 successes pass public verification. The explicit
   list of unexpressible rows is empty, and the run count is asserted. Eight
@@ -74,7 +74,7 @@ documented here.
 - Delegate preparation and completion to verifier 0.7.0's `prepareSigning`
   and `finishSigning`; remove the signer's context derivation,
   producer calls, assembly calls, and choice of post-sign verification function.
-- Use the frozen verifier 0.7.0 build at `a06673c`. Its preparation corpus uses
+- Use the frozen verifier 0.7.0 build at `3464ee0`. Its preparation corpus uses
   the public input shapes, and signing plans can only be made through
   `prepareSigning`. The signer already uses that path.
 - Accept signature bytes from any JavaScript realm, including Buffer and plain
@@ -95,8 +95,15 @@ documented here.
   values opaque for the verifier's checks. Return every verifier option error,
   including copy errors. Long algorithm lists retain an invalid length without
   walking their entries.
-- Read browser expectations from the shared table. Report the two ML-DSA
-  predecessor rows missing `expected_limited` and omit them from checked rows.
+- Run all 121 shared rows in Node and the browser bundle with no skips.
+  `ml-successor-ok` and `ml-successor-wrong` now use their table
+  `expected_limited`: `algorithm_unsupported_on_substrate`, one snapshot, and
+  zero custody calls because the browser cannot verify ML-DSA-65 predecessor
+  history. Node retains successor success and
+  `invalid_input`/`descriptor_chain_invalid`, respectively. Removing the duplicate
+  `termination-excluded-context` row
+  reduces the exact Ed25519 success count from 13 to 12 in each lane.
+  Existing row outcomes and the signer API remain unchanged with this build.
 - Resolve limits, then profile, then algorithm, before taking the key snapshot.
   Absent, `undefined`, and `null` algorithms select Ed25519. Explicit values are
   `Ed25519` and `ML-DSA-65`; others return `invalid_input`/`algorithm_unsupported`

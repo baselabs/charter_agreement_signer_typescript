@@ -332,6 +332,12 @@
         "shape": "ok",
         "snapshot_called": true
       },
+      "expected_limited": {
+        "code": "algorithm_unsupported_on_substrate",
+        "custody_called": false,
+        "shape": "algorithm_unsupported_on_substrate",
+        "snapshot_called": true
+      },
       "id": "ml-successor-ok",
       "key": "ml-issuer",
       "kind": "descriptor",
@@ -1020,6 +1026,12 @@
         "code": "descriptor_chain_invalid",
         "custody_called": false,
         "shape": "invalid_input",
+        "snapshot_called": true
+      },
+      "expected_limited": {
+        "code": "algorithm_unsupported_on_substrate",
+        "custody_called": false,
+        "shape": "algorithm_unsupported_on_substrate",
         "snapshot_called": true
       },
       "id": "ml-successor-wrong",
@@ -3239,40 +3251,6 @@
         }
       },
       "requires_mldsa_substrate": true
-    },
-    {
-      "claims": {
-        "charter_id": "sha-256:Q-Qbi1zkMpvKxf-rLCTC1BKNjqa9vISAtl1gZYbUaps",
-        "effective_at": "2026-08-26T13:00:00Z",
-        "governing_revision_digest": "sha-256:Q-Qbi1zkMpvKxf-rLCTC1BKNjqa9vISAtl1gZYbUaps",
-        "issued_at": "2026-08-25T13:01:00Z",
-        "party_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
-        "party_role": "issuer",
-        "protocol_revision": 2,
-        "reason_code": "mutual"
-      },
-      "context": "profile-counterparty",
-      "expected": {
-        "code": null,
-        "compact": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleSIsInR5cCI6ImNhcCt0ZXJtaW5hdGlvbiJ9.eyJjaGFydGVyX2lkIjoic2hhLTI1NjpRLVFiaTF6a01wdkt4Zi1yTENUQzFCS05qcWE5dklTQXRsMWdaWWJVYXBzIiwiZWZmZWN0aXZlX2F0IjoiMjAyNi0wOC0yNlQxMzowMDowMFoiLCJnb3Zlcm5pbmdfcmV2aXNpb25fZGlnZXN0Ijoic2hhLTI1NjpRLVFiaTF6a01wdkt4Zi1yTENUQzFCS05qcWE5dklTQXRsMWdaWWJVYXBzIiwiaXNzdWVkX2F0IjoiMjAyNi0wOC0yNVQxMzowMTowMFoiLCJwYXJ0eV9kZXNjcmlwdG9yX2RpZ2VzdCI6InNoYS0yNTY6TjA1VWE5OWhvWHhObkFsQ1l1d19wdGhjMjJtMGJmUGl3LUlVdmFHNVU0QSIsInBhcnR5X3JvbGUiOiJpc3N1ZXIiLCJwcm90b2NvbF9yZXZpc2lvbiI6MiwicmVhc29uX2NvZGUiOiJtdXR1YWwifQ.clPWF9nfh-I1ICOIFxeBrYgSmGC0SYNIjJ_13ibo-wbkcipMGXBeHh74ZmgJRFX29PIq-tUu0XG2nfPltivFDA",
-        "custody_called": true,
-        "shape": "ok",
-        "snapshot_called": true
-      },
-      "id": "termination-excluded-context",
-      "key": "ed-issuer",
-      "kind": "termination",
-      "options": {
-        "profile": {
-          "algorithms": [
-            "Ed25519"
-          ],
-          "revisions": [
-            1,
-            3
-          ]
-        }
-      }
     },
     {
       "claims": {

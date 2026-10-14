@@ -107,12 +107,10 @@ let runRows = 0;
 let edSuccesses = 0;
 let substrateErrors = 0;
 for (const row of sharedTable.cases) {
-  test(`shared browser case ${row.id}`, {
-    skip: missingLimitedRows.includes(row.id) ? "Shared table has no expected_limited for this ML-DSA predecessor row" : false,
-  }, async () => {
+  test(`shared browser case ${row.id}`, async () => {
     const { result, counts, context, algorithm } = await runCase(row, browser);
     const expected = row.expected_limited ?? row.expected;
-    const evidence = `${row.id}: ${JSON.stringify({ result, counts })}`;
+    const evidence = `${row.id}: Elixir=${JSON.stringify(expected)} TS=${JSON.stringify({ result, counts })}`;
     runRows += 1;
     assert.deepEqual(counts, {
       snapshots: Number(expected.snapshot_called), custody: Number(expected.custody_called),
@@ -138,11 +136,12 @@ for (const row of sharedTable.cases) {
 }
 
 test("the browser bundle accounts for every shared row", () => {
-  assert.equal(runRows + missingLimitedRows.length, sharedTable.cases.length);
-  assert.equal(edSuccesses, 13);
-  assert.equal(substrateErrors, 6);
+  assert.deepEqual(missingLimitedRows, [], "ML-DSA browser rows need expected_limited");
+  assert.equal(sharedTable.cases.length, 121);
+  assert.equal(runRows, sharedTable.cases.length);
+  assert.equal(edSuccesses, 12);
+  assert.equal(substrateErrors, 8);
   process.stdout.write(`Shared browser table: ${runRows} run, ${missingLimitedRows.length} missing limited expectations, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
-  if (missingLimitedRows.length) process.stdout.write(`Missing expected_limited: ${missingLimitedRows.join(", ")}.\n`);
 });
 
 test("the workshop flow, bundled with the site's browser shims, forms, accepts, signs a receipt and verifies", async () => {

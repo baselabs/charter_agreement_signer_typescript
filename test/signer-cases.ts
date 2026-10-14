@@ -16,9 +16,9 @@ import {
 
 // The digest is from the exact file in the source commit, including whitespace.
 export const SHARED_SOURCE = {
-  commit: "b3a21561a5fe3a246b77a9c4a5b9e1e3ee79cf08",
+  commit: "dab4d86230551a95185e5057d98cd20b85285734",
   file: "test/fixtures/signer_cases.json",
-  sha256: "42aa8c2f8c91fb2228d53ec8dc27cbbe1461e5422a2bd96da3164715a8937fda",
+  sha256: "3db6f031d6edec92c59e15481fdba884992f95837ea0aefd5bda6b9375c27bb2",
 } as const;
 
 type Key = {
