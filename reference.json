@@ -1,0 +1,12 @@
+{
+  "package": "charter_agreement_signer",
+  "version": "1.0.0",
+  "archive_sha256": "1ef96b66cce510de79ae59ab7f4d8293afb5822fbdd25fca20eb19a8350ce228",
+  "corpus_path": "priv/conformance",
+  "verification_semantics": 6,
+  "verifier": {
+    "version": "1.0.0",
+    "commit": "153225ac0fe91bdebd65225a812f018838d3d86e",
+    "integrity": "sha512-fjiqnSgXzCFM1cYMWmIurcLc7OObwpQzmd9TNy8uzoPS4cxMKZ3o4kXcH90DRv9WYtOn/PLu3ffkjOa8bJe3GA=="
+  }
+}

@@ -7,5 +7,5 @@ useDefault = true
 description = "The shared signer table holds signed public test artifacts minted from public test seeds, not credentials"
 targetRules = ["jwt"]
 paths = [
-  '''^test/fixtures/signer_cases\.json$'''
+  '''^(test/fixtures|conformance)/signer_cases\.json$'''
 ]

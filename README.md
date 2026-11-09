@@ -17,11 +17,20 @@ The signer checks the signature against the snapshot public key, then calls
 ## Install
 
 ```console
-npm install @charter-agreement-protocol/signer
+npm install @charter-agreement-protocol/signer@^1.0.0
 ```
 
-Version **0.3.0** requires Node >= 24.8.0 and
-`@charter-agreement-protocol/verifier` ^0.7.0, for its pre-sign API.
+
+Release submissions use npm's staged publishing workflow. A staged version
+becomes publicly installable only after owner approval. During release review,
+maintainers can use `npm stage download <stage-id>` and install that tarball.
+
+Version **1.0.0** requires Node >= 24.8.0 and
+`@charter-agreement-protocol/verifier` `^0.7.0 || ^1.0.0`, for its pre-sign API.
+Both compatibility lines are checked. The registry lock pins published 0.7.0;
+`reference.json` records the verifier 1.0 commit and exact staged archive integrity.
+Compatibility does not extend the verifier's security-maintenance policy. Once
+1.x is approved, update existing 0.7 locks to the maintained 1.x line.
 
 ## Quickstart
 
@@ -221,8 +230,8 @@ resolution, and the closed error vocabulary.
 - The workshop's browser bundle mints Ed25519 and runs the complete workshop
   flow. It cannot verify ML-DSA-65 and refuses that request before signing with
   the top-level `algorithm_unsupported_on_substrate` error.
-- The [shared table](test/fixtures/README.md) runs all 121 rows from the Elixir
-  signer, `charter_agreement_signer` 0.5.0, with its exact source bytes pinned by SHA-256. Real seed
+- The [shared table](conformance/README.md) runs all 121 rows from the Elixir
+  signer, `charter_agreement_signer` 1.0.0, with its exact source bytes pinned by SHA-256. Real seed
   keys check result shapes and codes, snapshot and custody counts, 12 exact
   Ed25519 success compacts, and five ML-DSA-65 successes through verification.
   All 121 rows run in both Node and the browser bundle with no skips. Eight
@@ -241,29 +250,26 @@ This package has no telemetry events or hooks and no signer capability report.
 
 ## SemVer
 
-Package SemVer decoupled from the protocol's `protocol_revision`. While the
-package is below 1.0, breaking public-API changes land in minor versions and
-are named in the commit message (0.2.0 is one: `signTermination`'s view
-requires `chain`, `signAcceptance` now enforces the refusal guards over the
-`chain` it previously ignored, and `signReceipt` requires its issuing view);
-at or above 1.0 a package major is owed when a shipped public API is removed
-or changes behavior.
+The 1.x exports, TypeScript contracts, options and documented error shapes
+follow Semantic Versioning. Removal, renaming or incompatible valid-input
+behavior requires a major release. New exports and optional options or fields are minor additions. An incompatible
+change to a closed TypeScript union requires a major release. Compatible bug and security fixes can tighten malformed-input handling.
+Protocol `protocol_revision` is a separate wire identity.
+
+`reference.json` pins the published Elixir signer 1.0.0 archive. The unchanged
+121-row table ships in `conformance/` and is checked byte for byte against it.
+`npm run check:reference` performs that comparison; the native and browser
+suites execute every row. Elixir is not a runtime dependency.
 
 ## Development
 
 Use Node 24 (at least 24.8.0) and npm. The lockfile selects TypeScript 7.0.2
-and `@types/node` 26.6.4. CI runs on Linux with Node 24.8.0 and Node 24
+and `@types/node` 26.6.6. CI runs on Linux with Node 24.8.0 and Node 24
 using a frozen install; the same npm commands are used for local development on macOS and Linux.
 
 ```console
 npm ci
-npm run typecheck
-npm test
-npm run test:cases
-npm run build
-npm run typecheck:web
-npm run build:site
-npm pack --dry-run
+npm run check
 ```
 
 `build` emits JavaScript and declarations into `dist/`; `build:site` writes
@@ -280,10 +286,14 @@ workshop's version badge. Run the development checks above, commit and push
 main, and wait for CI to pass. Then tag that same commit `v<package-version>`
 and push that specific tag.
 
-The tag triggers verification and `npm stage publish --provenance` through
+The tag verifies both compatibility lines and the packed consumer, then
+a separate job runs `npm stage publish --provenance --ignore-scripts` through
 GitHub Actions OIDC. A successful staging step prints the package version and
 stage ID. The package becomes public only after the owner approves the staged
-release on npmjs.com with 2FA. Keep npm staging in this workflow.
+release on npmjs.com with 2FA. Keep npm staging in this workflow. Staging requires npm >= 11.15.0.
+The full check includes the real resource-cost suite, reference byte comparison,
+installed README example, declaration compilation and wrong-key rejection.
+Approve the verifier stage before the signer stage.
 
 ## License
 

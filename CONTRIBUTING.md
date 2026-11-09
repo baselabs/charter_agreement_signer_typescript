@@ -17,15 +17,13 @@ Install with the frozen lockfile, then run the local checks:
 
 ```console
 npm ci
-npm test
-npm run typecheck
-npm run typecheck:web
-npm run build
-npm run build:site
-npm pack --dry-run
+npm run check
+npm run check:verifier
 ```
 
-The checks after installation run locally without a network connection.
+The unit and type checks can use installed dependencies offline. Reference,
+package-consumer and verifier-candidate checks need network access to Hex, npm
+and GitHub.
 The suite builds a browser bundle with the workshop's shims and exercises
 real Ed25519 and ML-DSA-65 keys. The library build writes `dist/`; the site
 build writes `site-dist/`.
@@ -52,10 +50,17 @@ plain messages unless the maintainer asks otherwise. Do not use `git stash`.
   or handles that return invented signatures.
 - Search for tests of the old contract before changing behavior.
 
-The local suite runs the [shared signer table](test/fixtures/README.md)
+The local suite runs the [shared signer table](conformance/README.md)
 against the TypeScript verifier this checkout installs. It compares recorded
 Elixir outcomes and exact Ed25519 compacts with real seed keys, then checks
 every success through verification. It does not execute Elixir locally.
+`check:reference` verifies the rows against the published Elixir signer 1.0.0
+archive. `check:verifier` fetches verifier 1.0.0 at the immutable commit in
+`reference.json`, rebuilds its archive and requires the exact recorded staged
+integrity. It checks the same signer archive against that candidate as well
+as the frozen registry baseline. To use a downloaded copy of that same staged
+archive, use `npm run check:verifier -- --archive /absolute/path/package.tgz`.
+The archive must match the recorded staged integrity. No repository lock is replaced.
 Keep the source table byte for byte and report disagreements with both outcomes.
 
 ## Protocol dependency changes

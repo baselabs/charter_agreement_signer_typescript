@@ -1,54 +1,61 @@
-# npm releases of @charter-agreement-protocol/signer. Publishing is bound to
-# THIS repository's workflow identity (GitHub Actions OIDC, no long-lived
-# token): the workflow STAGES the artifact (npm stage publish, provenance
-# attached) and a human approves the staged release on npmjs.com under 2FA.
 name: Release
 
 on:
+  workflow_dispatch: {}
   push:
     tags: ["v*"]
 
 permissions:
   contents: read
-  id-token: write
+  actions: read
 
 jobs:
-  publish:
-    name: Verify then publish to npm (provenance-bound)
+  verify:
+    name: Verify the exact staged archive
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
-
-      - name: Install (frozen lockfile)
-        run: npm ci
-
-      - name: Typecheck (strict)
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Pack (content boundary)
-        run: npm pack --dry-run
-
-      - name: Check registry for existing version
-        id: existing
+          node-version: "24"
+      - name: Require green source CI for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if npm view "@charter-agreement-protocol/signer@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Stage publish to npm with provenance (human approval required)
-        if: steps.existing.outputs.published == 'false'
-        run: npm stage publish --provenance
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push" > "$RUNNER_TEMP/source-ci.json"
+          node --input-type=module -e 'import {readFileSync} from "node:fs"; import assert from "node:assert/strict"; const runs=JSON.parse(readFileSync(process.env.RUNNER_TEMP + "/source-ci.json")).workflow_runs; assert.ok(runs.some(r => r.head_sha === process.env.GITHUB_SHA && r.event === "push" && r.conclusion === "success"), "the source commit must have green main CI");'
+      - name: Pin archive tooling
+        run: npm install --global npm@11.19.0 --ignore-scripts
+      - name: Require the package version to match its tag
+        if: github.event_name == 'push'
+        run: node --input-type=module -e 'import {readFileSync} from "node:fs"; import assert from "node:assert/strict"; assert.equal("v" + JSON.parse(readFileSync("package.json")).version, process.env.GITHUB_REF_NAME);'
+      - run: npm ci
+      - run: npm run check
+      - run: npm run check:verifier
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-package-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
+  publish:
+    name: Stage the verified archive with provenance
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Pin the staging-capable npm CLI
+        run: npm install --global npm@11.19.0 --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-package-${{ github.sha }}
+          path: artifacts
+      - name: Verify archive checksum
+        working-directory: artifacts
+        run: sha256sum --check SHA256SUMS
+      - name: Stage for owner approval on npm
+        run: npm stage publish ./artifacts/package.tgz --provenance --ignore-scripts --access public --registry=https://registry.npmjs.org/

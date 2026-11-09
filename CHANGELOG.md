@@ -3,6 +3,20 @@
 All notable public changes to `@charter-agreement-protocol/signer` are
 documented here.
 
+## [1.0.0] — 2026-11-09
+
+- Stabilizes the public API under Semantic Versioning; wire revisions 1–3 and
+  the certified corpus stay unchanged.
+- Ships the unchanged 121-row signer corpus in `conformance/`, moved from
+  the test fixtures, and its Elixir reference identity in `reference.json`.
+- Pins and checks the published Elixir 1.0 conformance reference. The release
+  gate verifies packed contents, reproducible bytes, installed README examples
+  and generated declarations.
+- Refreshes documentation, security support, Node requirements and workshop
+  version labels. Updates development tools and runs resource-cost checks in CI.
+- Stages verified archives with provenance through the existing npm trusted
+  publisher. Owner approval with 2FA is required to make them public.
+
 ## [0.3.0] — October 14, 2026
 
 ### Breaking

@@ -2,8 +2,12 @@
 
 ## Supported versions
 
-The latest published `0.x` line is supported. Wire compatibility follows
-the public `@charter-agreement-protocol/verifier` package's contract.
+The 1.x line is supported after staged 1.0.0 is approved. Until then, 0.3.x
+remains supported. Signer 1.0 supports verifier `^0.7.0 || ^1.0.0`; both
+compatibility lines run through release checks. This does not promise maintenance
+of verifier 0.7 after its security-support window ends: follow the verifier's
+security policy and update locks to maintained 1.x once approved. Wire compatibility follows the verifier's
+protocol contract, separately from package Semantic Versioning.
 
 ## Security invariants
 

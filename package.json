@@ -1,6 +1,6 @@
 {
   "name": "@charter-agreement-protocol/signer",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Holder-side companion signer for the Charter Agreement Protocol (CAP) in TypeScript - key custody only: an atomic key snapshot, the sign callback, the wrong-key guard, and post-sign verification, with framing, claims, context, key matching, limits, profile, and completion delegated to the @charter-agreement-protocol/verifier pre-sign API. CAP verifies; it never authorizes; this signer signs, it never verifies third-party artifacts or takes custody.",
   "license": "Apache-2.0",
   "type": "module",
@@ -21,7 +21,9 @@
     "LICENSE",
     "NOTICE",
     "README.md",
-    "SECURITY.md"
+    "SECURITY.md",
+    "reference.json",
+    "conformance"
   ],
   "engines": {
     "node": ">=24.8.0"
@@ -29,20 +31,24 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types --no-warnings signer.test.ts signer.browser.test.ts signer.cases.test.ts",
+    "test": "node --test --experimental-strip-types --no-warnings signer.test.ts signer.browser.test.ts signer.cases.test.ts signer.cost.test.ts",
     "test:cost": "node --test --experimental-strip-types --no-warnings signer.cost.test.ts",
     "test:cases": "node --test --experimental-strip-types --no-warnings signer.cases.test.ts",
     "prepack": "npm run build",
     "typecheck:web": "tsc -p tsconfig.web.json",
-    "build:site": "node web/build.mjs && esbuild web/main.ts --bundle --minify --format=iife --target=es2022 --outfile=site-dist/app.js --alias:node:crypto=./web/shim/node-crypto.ts --alias:node:fs=./web/shim/node-fs.ts --alias:node:path=./web/shim/node-path.ts --inject:./web/shim/buffer-global.ts"
+    "build:site": "node web/build.mjs && esbuild web/main.ts --bundle --minify --format=iife --target=es2022 --outfile=site-dist/app.js --alias:node:crypto=./web/shim/node-crypto.ts --alias:node:fs=./web/shim/node-fs.ts --alias:node:path=./web/shim/node-path.ts --inject:./web/shim/buffer-global.ts",
+    "check:reference": "node scripts/check-reference.mjs",
+    "check:package": "node scripts/check-package.mjs",
+    "check": "npm run typecheck && npm run typecheck:web && npm run test && npm run build && npm run build:site && npm run check:reference && npm run check:package",
+    "check:verifier": "node scripts/check-verifier.mjs"
   },
   "dependencies": {
-    "@charter-agreement-protocol/verifier": "^0.7.0"
+    "@charter-agreement-protocol/verifier": "^0.7.0 || ^1.0.0"
   },
   "devDependencies": {
     "@noble/ed25519": "^3.2.0",
     "@noble/hashes": "^2.4.0",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.6",
     "buffer": "^6.0.3",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"

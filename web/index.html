@@ -51,7 +51,7 @@
     parties’ keys in your browser.</p>
     <div class="hero-actions">
       <a class="btn primary" href="#workshop"><svg class="ic"><use href="#i-terminal"/></svg> Form a charter — 60 seconds</a>
-      <a class="btn ghost" href="#install">npm i @charter-agreement-protocol/signer</a>
+      <a class="btn ghost" href="#install">npm i @charter-agreement-protocol/signer@^1.0.0</a>
     </div>
     <div class="flow" aria-label="The charter flow">
       <div class="actor issuer"><svg class="ic"><use href="#i-seal"/></svg><span>Party A</span><small>descriptor + acceptance</small></div>
@@ -63,7 +63,7 @@
     <p class="custody-note"><svg class="ic"><use href="#i-lock"/></svg> Both parties’ keys stay in this page’s custody —
     <span id="custody-mode" class="pill"></span></p>
     <ul class="badges">
-      <li>signer 0.3.0</li><li>byte-exact · RFC 8785 canonical</li><li>Ed25519 workshop · ML-DSA in Node</li>
+      <li>signer 1.0.0</li><li>byte-exact · RFC 8785 canonical</li><li>Ed25519 workshop · ML-DSA in Node</li>
     </ul>
   </div>
 </section>
@@ -220,7 +220,8 @@
 // The verifier checks claims, context, and the holder's descriptor key
 // through prepareSigning, then assembles and verifies with finishSigning.</pre>
   <div class="install-row">
-    <pre class="code slim">npm i @charter-agreement-protocol/signer    # one runtime dep: the verifier package</pre>
+    <p>npm installs approved versions. During release review, download the staged archive for inspection.</p>
+  <pre class="code slim">npm i @charter-agreement-protocol/signer@^1.0.0    # one runtime dep: the verifier package</pre>
   </div>
 </section>
 </main>

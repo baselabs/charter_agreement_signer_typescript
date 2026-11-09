@@ -2,16 +2,16 @@
 
 `signer_cases.json` is copied byte for byte from the CAS Elixir signer. The
 source commit and SHA-256 are recorded once in
-[`SHARED_SOURCE`](../signer-cases.ts). The digest covers whitespace as well as
+[`SHARED_SOURCE`](https://github.com/baselabs/charter_agreement_signer_typescript/blob/v1.0.0/test/signer-cases.ts). The digest covers whitespace as well as
 JSON values. These seeds are public test material.
 
 Run `npm run test:cases` for all 121 Node rows. The runner is
-[`signer.cases.test.ts`](../../signer.cases.test.ts); its empty
+[`signer.cases.test.ts`](https://github.com/baselabs/charter_agreement_signer_typescript/blob/v1.0.0/signer.cases.test.ts); its empty
 `unexpressibleRows` map is the explicit list of Elixir-only shapes, keyed by
 row id with a reason. This table has no such rows. The run count is asserted,
 so new omissions cannot pass silently.
 
-The outcome mapping table is in [`signer-cases.ts`](../signer-cases.ts).
+The outcome mapping table is in [`signer-cases.ts`](https://github.com/baselabs/charter_agreement_signer_typescript/blob/v1.0.0/test/signer-cases.ts).
 It preserves nested error codes and maps top-level error atoms to the TS
 error member without a code. Every row checks the full result shape, snapshot
 count, and custody count. Ed25519 successes compare the exact compact. Every

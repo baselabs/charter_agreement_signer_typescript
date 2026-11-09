@@ -16,8 +16,8 @@ import {
 
 // The digest is from the exact file in the source commit, including whitespace.
 export const SHARED_SOURCE = {
-  commit: "dab4d86230551a95185e5057d98cd20b85285734",
-  file: "test/fixtures/signer_cases.json",
+  commit: "f9a7bc3c8c644afa74cdf95fd2d3b832fa99ce00",
+  file: "priv/conformance/signer_cases.json",
   sha256: "3db6f031d6edec92c59e15481fdba884992f95837ea0aefd5bda6b9375c27bb2",
 } as const;
 
@@ -48,7 +48,7 @@ export type Case = {
 type Context = Partial<ChainView> & { type: "set" | "chain" | "revision" | "predecessor"; text?: string };
 type Table = { format_version: number; keys: Record<string, Key>; contexts: Record<string, Context>; cases: Case[] };
 
-export const fixtureBytes = readFileSync(new URL("./fixtures/signer_cases.json", import.meta.url));
+export const fixtureBytes = readFileSync(new URL("../conformance/signer_cases.json", import.meta.url));
 export const sharedTable: Table = JSON.parse(fixtureBytes.toString("utf8"));
 
 // Elixir outcome                        TypeScript outcome
