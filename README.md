@@ -291,8 +291,9 @@ the default branch or version tags directly.
 Send infra one message with the repository, full commit, version, what goes out,
 and the green `qualified` run. Infra obtains owner approval and dispatches
 [publish.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
-from the default branch. Its protected `publish` job requires that exact commit's
-green qualification, refuses an existing registry version or version tag, builds
+from the default branch. The default branch accepts only commits with a green
+`qualified` run. The protected `publish` job refuses an existing registry version
+or version tag, builds
 the library and documentation site, inspects the archive, and publishes those
 exact bytes with `npm publish --provenance` through OIDC. No stored npm token is
 used. Infra reads the publication back before creating `v<version>` on the
@@ -302,8 +303,8 @@ Qualification checks both compatibility lines, the real resource-cost suite,
 reference bytes, the installed README example, declarations and wrong-key
 rejection. Site typechecking and building are required by `qualified`. Infra
 dispatches [pages.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/pages.yml)
-from the default branch to build and deploy the static site through the protected
-`publish` environment. A default-branch push or version tag starts neither workflow.
+from the default branch to build and deploy the static site through GitHub's
+`github-pages` environment. A default-branch push or version tag starts neither workflow.
 
 ## License
 
