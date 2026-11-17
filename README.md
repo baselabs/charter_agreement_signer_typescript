@@ -21,9 +21,8 @@ npm install @charter-agreement-protocol/signer@^1.0.0
 ```
 
 
-Release submissions use npm's staged publishing workflow. A staged version
-becomes publicly installable only after owner approval. During release review,
-maintainers can use `npm stage download <stage-id>` and install that tarball.
+The maintainers' release process publishes inspected archives to npm with
+provenance through GitHub Actions trusted publishing after owner approval.
 
 Version **1.0.0** requires Node >= 24.8.0 and
 `@charter-agreement-protocol/verifier` `^0.7.0 || ^1.0.0`, for its pre-sign API.
@@ -222,7 +221,7 @@ resolution, and the closed error vocabulary.
 
 ## Evidence
 
-- Linux CI runs the suite on Node 24.8.0 and the current Node 24 line.
+- Linux CI runs the suite on the exact Node in `.tool-versions` and Node 24.8.0.
   Real Node crypto mints Ed25519 and ML-DSA-65 genesis and successor descriptors.
   Pre-sign rejection tests count real signing calls and require zero calls.
   Tests cover key mismatches, predecessor checks, malformed contexts, profiles,
@@ -264,8 +263,9 @@ suites execute every row. Elixir is not a runtime dependency.
 ## Development
 
 Use Node 24 (at least 24.8.0) and npm. The lockfile selects TypeScript 7.0.2
-and `@types/node` 26.6.6. CI runs on Linux with Node 24.8.0 and Node 24
-using a frozen install; the same npm commands are used for local development on macOS and Linux.
+and `@types/node` 26.6.6. CI runs on Linux with the exact Node in `.tool-versions`
+and the Node 24.8.0 compatibility floor, checks the installed versions, and uses
+a frozen install. Qualification runs these commands on GitHub-hosted runners:
 
 ```console
 npm ci
@@ -277,23 +277,33 @@ the browser workshop to `site-dist/`. `prepack` runs the library build.
 For the TypeScript 7 upgrade, the four library output files were byte-identical
 to the TypeScript 5.9.3 build (observed October 6, 2026 with `diff -ru`).
 
-## Release staging
+## Releases
 
-The [Release workflow](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/release.yml) is the npm trusted
-publisher for this repository. Prepare a release by updating `package.json`,
-`package-lock.json`, this README's release version, the CHANGELOG, and the
-workshop's version badge. Run the development checks above, commit and push
-main, and wait for CI to pass. Then tag that same commit `v<package-version>`
-and push that specific tag.
+The maintainers' release process runs covering checks on the build box where
+configured, never on the maintainers' Mac. This public repository has no build-box
+checkout: its qualification runs on pinned GitHub-hosted runners at landing.
+Prepare the version commit with matching `package.json` and `package-lock.json`
+versions, stamp the changelog, and update this README's release version and the
+workshop's version badge. Land through `kimosabe-land --repo . --sha <full commit>`;
+it qualifies the commit on `kci/**` before moving the default branch. Do not push
+the default branch or version tags directly.
 
-The tag verifies both compatibility lines and the packed consumer, then
-a separate job runs `npm stage publish --provenance --ignore-scripts` through
-GitHub Actions OIDC. A successful staging step prints the package version and
-stage ID. The package becomes public only after the owner approves the staged
-release on npmjs.com with 2FA. Keep npm staging in this workflow. Staging requires npm >= 11.15.0.
-The full check includes the real resource-cost suite, reference byte comparison,
-installed README example, declaration compilation and wrong-key rejection.
-Approve the verifier stage before the signer stage.
+Send infra one message with the repository, full commit, version, what goes out,
+and the green `qualified` run. Infra obtains owner approval and dispatches
+[publish.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
+from the default branch. Its protected `publish` job requires that exact commit's
+green qualification, refuses an existing registry version or version tag, builds
+the library and documentation site, inspects the archive, and publishes those
+exact bytes with `npm publish --provenance` through OIDC. No stored npm token is
+used. Infra reads the publication back before creating `v<version>` on the
+published commit. For a paired release, publish and verify the verifier first.
+
+Qualification checks both compatibility lines, the real resource-cost suite,
+reference bytes, the installed README example, declarations and wrong-key
+rejection. Site typechecking and building are required by `qualified`. Infra
+dispatches [pages.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/pages.yml)
+from the default branch to build and deploy the static site through the protected
+`publish` environment. A default-branch push or version tag starts neither workflow.
 
 ## License
 

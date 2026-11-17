@@ -8,12 +8,13 @@ Private keys stay behind the caller's callbacks.
 ## Toolchain
 
 Use Node 24, at least 24.8.0, and npm. `package-lock.json` pins the build
-tools and verifier version. CI runs on Linux with Node 24.8.0 and the current
-Node 24 line.
+tools and verifier version. CI runs on Linux with the exact Node pin in
+`.tool-versions` and the Node 24.8.0 compatibility floor, refusing a different
+installed version.
 
 ## Before a pull request
 
-Install with the frozen lockfile, then run the local checks:
+Qualification installs with the frozen lockfile and runs these checks:
 
 ```console
 npm ci
@@ -21,12 +22,16 @@ npm run check
 npm run check:verifier
 ```
 
+The maintainers' release process runs covering checks on the build box where
+configured, never on the maintainers' Mac. This public repository has no build-box
+checkout; its checks run on GitHub-hosted CI at landing through `kimosabe-land`.
 The unit and type checks can use installed dependencies offline. Reference,
 package-consumer and verifier-candidate checks need network access to Hex, npm
 and GitHub.
 The suite builds a browser bundle with the workshop's shims and exercises
 real Ed25519 and ML-DSA-65 keys. The library build writes `dist/`; the site
-build writes `site-dist/`.
+build writes `site-dist/`. Site typechecking and building run in a dedicated
+qualification job; `qualified` requires every source and site job to succeed.
 
 ## Windows
 
@@ -37,8 +42,9 @@ Linux only. Native ML-DSA tests require the supported Node crypto runtime.
 ## Commits
 
 Use explicit paths when staging or committing. Keep tool directories and
-local process state out of commits. Work on `main` in small commits with
-plain messages unless the maintainer asks otherwise. Do not use `git stash`.
+local process state out of commits. Work on a branch in small commits with
+plain messages and land through `kimosabe-land --repo . --sha <full commit>`.
+Do not push the default branch or version tags directly. Do not use `git stash`.
 
 ## Tests and checks
 
@@ -50,7 +56,7 @@ plain messages unless the maintainer asks otherwise. Do not use `git stash`.
   or handles that return invented signatures.
 - Search for tests of the old contract before changing behavior.
 
-The local suite runs the [shared signer table](conformance/README.md)
+The suite runs the [shared signer table](conformance/README.md)
 against the TypeScript verifier this checkout installs. It compares recorded
 Elixir outcomes and exact Ed25519 compacts with real seed keys, then checks
 every success through verification. It does not execute Elixir locally.
@@ -74,3 +80,13 @@ or error codes. Keep signing fixtures canonical.
 Update documentation with the behavior it describes. Keep error names,
 supported options, package metadata and the workshop's version badge in
 sync. Describe only checks that run and features that ship.
+
+## Releases
+
+The version commit stamps the changelog. After qualification and landing, send
+infra one message containing the repository, full commit, version, what goes out,
+and the green `qualified` run. Infra obtains owner approval, dispatches
+`publish.yml`, reads the npm publication back, and creates `v<version>` on the
+published commit. Publication uses the protected `publish` environment and npm
+OIDC trusted publishing; no maintainer-held registry token is needed. Static-site
+publication is a separate infra dispatch of `pages.yml` from the default branch.

@@ -41,9 +41,12 @@ A report should include:
 
 ## Verifying a release
 
-The [Release workflow](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/release.yml)
-checks the package before staging it on npm with provenance through
-GitHub Actions OIDC. The owner approves the staged release on npm with 2FA.
+The maintainers' release process qualifies each commit before landing.
+After owner approval, infra dispatches the protected
+[Publish workflow](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
+from the default branch. It builds and inspects the exact package archive,
+then publishes it to npm with provenance through GitHub Actions OIDC.
+Infra reads the publication back before creating its immutable version tag.
 Inspect the published package's source repository, archive integrity and
 provenance metadata with:
 

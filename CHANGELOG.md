@@ -3,6 +3,12 @@
 All notable public changes to `@charter-agreement-protocol/signer` are
 documented here.
 
+## [Unreleased]
+
+- Qualifies commits only through landing CI, with exact runtime checks and a
+  required site job. The maintainers' release process dispatches protected npm
+  and Pages publication from the default branch after qualification.
+
 ## [1.0.0] — 2026-11-09
 
 - Stabilizes the public API under Semantic Versioning; wire revisions 1–3 and
