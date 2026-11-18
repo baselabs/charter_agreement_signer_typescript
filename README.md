@@ -28,8 +28,8 @@ Version **1.0.0** requires Node >= 24.8.0 and
 `@charter-agreement-protocol/verifier` `^0.7.0 || ^1.0.0`, for its pre-sign API.
 Both compatibility lines are checked. The registry lock pins published 0.7.0;
 `reference.json` records the verifier 1.0 commit and exact staged archive integrity.
-Compatibility does not extend the verifier's security-maintenance policy. Once
-1.x is approved, update existing 0.7 locks to the maintained 1.x line.
+Compatibility does not extend the verifier's security-maintenance policy.
+Verifier 1.0.0 is now served by npm; update existing 0.7 locks to maintained 1.x.
 
 ## Quickstart
 
@@ -292,13 +292,39 @@ Send infra one message with the repository, full commit, version, what goes out,
 and the green `qualified` run. Infra obtains owner approval and dispatches
 [publish.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
 from the default branch. The default branch accepts only commits with a green
-`qualified` run. The protected `publish` job refuses an existing registry version
-or version tag, builds
-the library and documentation site, inspects the archive, and stages those
-exact bytes with `npm stage publish --provenance` through OIDC. No stored npm
-token is used. The package becomes public only after the owner approves the
-staged release on npmjs.com with 2FA. Infra reads the publication back before creating `v<version>` on the
-published commit. For a paired release, publish and verify the verifier first.
+`qualified` run. The protected `publish` job refuses an existing version tag,
+a package name the registry lacks, a deprecated or unpublished version, and
+served bytes that differ from the inspected archive. A first publication is
+the owner's decision. The job builds the library and documentation site,
+inspects the archive, and stages missing bytes with
+`npm stage publish --provenance` through OIDC. No stored npm token is used.
+The package becomes public only after the owner approves the staged release
+on npmjs.com with 2FA.
+
+A held release is finished by dispatching `publish.yml` again on the same
+commit after approval. It stages only what is missing, skips an identical
+served version, and refuses differing bytes or a retired version. npm's OIDC
+credentials cannot read pending staged versions: a dispatch while approval
+is still pending may attempt to stage again, which npm refuses without
+replacing the staged version. Approve the pending stage before dispatching
+again.
+
+The consumer-verified `package.tgz` and `SHA256SUMS` leave the job as one
+`release-assets` artifact. After a successful registry read-back, the
+maintainers' release process tags the published commit as `v<version>`,
+compares the archive with npm's bytes, and creates that version's GitHub
+release with those files. No workflow creates a release or runs on a tag.
+For a paired release, publish and verify the verifier first.
+
+To verify a release, download `package.tgz` and `SHA256SUMS` from the matching
+[`v<version>` GitHub release](https://github.com/baselabs/charter_agreement_signer_typescript/releases),
+then run `sha256sum --check SHA256SUMS` in their directory. Check that the
+archive's SHA-512 matches npm's `dist.integrity`, and inspect its source and
+npm provenance for that exact version (replace `<version>` below):
+
+```console
+npm view '@charter-agreement-protocol/signer@<version>' repository.url dist.integrity dist.attestations
+```
 
 Qualification checks both compatibility lines, the real resource-cost suite,
 reference bytes, the installed README example, declarations and wrong-key

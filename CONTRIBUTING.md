@@ -86,7 +86,24 @@ sync. Describe only checks that run and features that ship.
 The version commit stamps the changelog. After qualification and landing, send
 infra one message containing the repository, full commit, version, what goes out,
 and the green `qualified` run. Infra obtains owner approval, dispatches
-`publish.yml`, reads the npm publication back, and creates `v<version>` on the
-published commit. Publication uses the protected `publish` environment and npm
-OIDC trusted publishing; no maintainer-held registry token is needed. Static-site
-publication is a separate infra dispatch of `pages.yml` from the default branch.
+`publish.yml` from the default branch. Publication uses the protected `publish`
+environment and npm OIDC trusted publishing; no maintainer-held registry token
+is needed. It refuses a package name the registry lacks: first publication
+is the owner's decision. It also refuses a version tag, differing served
+bytes, and deprecated or unpublished versions.
+
+Finish a held release by dispatching `publish.yml` again on the same commit
+after owner approval on npmjs.com. The job stages only what is missing and
+skips identical served bytes. OIDC cannot list or view pending stages, so
+npm refuses a repeated pending stage without replacement; approve it before
+redispatching.
+
+The verified archive and checksum leave as one `release-assets` artifact.
+After registry read-back, the maintainers' release process tags the published
+commit as `v<version>`, compares the archive with npm, and creates the GitHub
+release from those files. No workflow creates a release or runs on a tag.
+Consumer verification uses the matching
+[GitHub release's assets](https://github.com/baselabs/charter_agreement_signer_typescript/releases)
+and npm provenance; follow [the README verification commands](README.md#releases).
+Static-site publication is a separate infra dispatch of `pages.yml` from the
+default branch.

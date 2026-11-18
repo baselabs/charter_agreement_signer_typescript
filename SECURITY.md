@@ -2,11 +2,11 @@
 
 ## Supported versions
 
-The 1.x line is supported after staged 1.0.0 is approved. Until then, 0.3.x
-remains supported. Signer 1.0 supports verifier `^0.7.0 || ^1.0.0`; both
+The 1.x line is supported; 1.0.0 is served by npm. The 0.3.x support window
+ended when 1.0.0 was approved. Signer 1.0 supports verifier `^0.7.0 || ^1.0.0`; both
 compatibility lines run through release checks. This does not promise maintenance
 of verifier 0.7 after its security-support window ends: follow the verifier's
-security policy and update locks to maintained 1.x once approved. Wire compatibility follows the verifier's
+security policy and update locks to maintained 1.x. Wire compatibility follows the verifier's
 protocol contract, separately from package Semantic Versioning.
 
 ## Security invariants
@@ -45,13 +45,26 @@ The maintainers' release process qualifies each commit before landing.
 After owner approval, infra dispatches the protected
 [Publish workflow](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
 from the default branch. It builds and inspects the exact package archive,
-then publishes it to npm with provenance through GitHub Actions OIDC.
-Infra reads the publication back before creating its immutable version tag.
-Inspect the published package's source repository, archive integrity and
-provenance metadata with:
+then stages missing bytes with npm provenance through GitHub Actions OIDC.
+It refuses an absent package name (first publication is the owner's decision),
+differing served bytes, a version tag, and deprecated or unpublished versions.
+Finish a held release by approving it on npmjs.com and dispatching the workflow
+again on the same commit. It stages only what is missing and skips identical
+served versions. OIDC cannot read pending stages; npm refuses a duplicate
+pending stage without replacing it.
+
+The consumer files leave as one `release-assets` artifact. After registry
+read-back, the maintainers' release process tags the published commit as
+`v<version>`, compares the archive with npm's bytes, and creates that GitHub
+release from those files. No workflow creates a release or runs on a tag.
+Download `package.tgz` and `SHA256SUMS` from the matching
+[GitHub release](https://github.com/baselabs/charter_agreement_signer_typescript/releases)
+and run `sha256sum --check SHA256SUMS` in their directory. Compare the
+archive's SHA-512 with npm's integrity and inspect source and provenance for
+the exact release version (replace `<version>` below):
 
 ```console
-npm view @charter-agreement-protocol/signer repository.url dist.integrity dist.attestations
+npm view '@charter-agreement-protocol/signer@<version>' repository.url dist.integrity dist.attestations
 ```
 
 ## Acknowledgment
