@@ -23,8 +23,8 @@ npm run check:verifier
 ```
 
 The maintainers' release process runs covering checks on the build box where
-configured, never on the maintainers' Mac. This public repository has no build-box
-checkout; its checks run on GitHub-hosted CI at landing through `kimosabe-land`.
+configured, never on a workstation. This public repository has no build-box
+checkout; its checks run on GitHub-hosted CI at landing through the maintainers' landing tool.
 The unit and type checks can use installed dependencies offline. Reference,
 package-consumer and verifier-candidate checks need network access to Hex, npm
 and GitHub.
@@ -43,7 +43,7 @@ Linux only. Native ML-DSA tests require the supported Node crypto runtime.
 
 Use explicit paths when staging or committing. Keep tool directories and
 local process state out of commits. Work on a branch in small commits with
-plain messages and land through `kimosabe-land --repo . --sha <full commit>`.
+plain messages and land the full commit through the maintainers' landing tool.
 Do not push the default branch or version tags directly. Do not use `git stash`.
 
 ## Tests and checks
@@ -84,8 +84,8 @@ sync. Describe only checks that run and features that ship.
 ## Releases
 
 The version commit stamps the changelog. After qualification and landing, send
-infra one message containing the repository, full commit, version, what goes out,
-and the green `qualified` run. Infra obtains owner approval, dispatches
+the release operator one message containing the repository, full commit, version, what goes out,
+and the green `qualified` run. The release operator obtains owner approval, dispatches
 `publish.yml` from the default branch. Publication uses the protected `publish`
 environment and npm OIDC trusted publishing; no maintainer-held registry token
 is needed. It refuses a package name the registry lacks: first publication
@@ -105,5 +105,5 @@ release from those files. No workflow creates a release or runs on a tag.
 Consumer verification uses the matching
 [GitHub release's assets](https://github.com/baselabs/charter_agreement_signer_typescript/releases)
 and npm provenance; follow [the README verification commands](README.md#releases).
-Static-site publication is a separate infra dispatch of `pages.yml` from the
+Static-site publication is a separate release-operator dispatch of `pages.yml` from the
 default branch.

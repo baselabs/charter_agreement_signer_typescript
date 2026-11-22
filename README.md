@@ -280,16 +280,16 @@ to the TypeScript 5.9.3 build (observed October 6, 2026 with `diff -ru`).
 ## Releases
 
 The maintainers' release process runs covering checks on the build box where
-configured, never on the maintainers' Mac. This public repository has no build-box
+configured, never on a workstation. This public repository has no build-box
 checkout: its qualification runs on pinned GitHub-hosted runners at landing.
 Prepare the version commit with matching `package.json` and `package-lock.json`
 versions, stamp the changelog, and update this README's release version and the
-workshop's version badge. Land through `kimosabe-land --repo . --sha <full commit>`;
+workshop's version badge. Land the full commit through the maintainers' landing tool;
 it qualifies the commit on `kci/**` before moving the default branch. Do not push
 the default branch or version tags directly.
 
-Send infra one message with the repository, full commit, version, what goes out,
-and the green `qualified` run. Infra obtains owner approval and dispatches
+Send the release operator one message with the repository, full commit, version, what goes out,
+and the green `qualified` run. The release operator obtains owner approval and dispatches
 [publish.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
 from the default branch. The default branch accepts only commits with a green
 `qualified` run. The protected `publish` job refuses an existing version tag,
@@ -328,7 +328,7 @@ npm view '@charter-agreement-protocol/signer@<version>' repository.url dist.inte
 
 Qualification checks both compatibility lines, the real resource-cost suite,
 reference bytes, the installed README example, declarations and wrong-key
-rejection. Site typechecking and building are required by `qualified`. Infra
+rejection. Site typechecking and building are required by `qualified`. The release operator
 dispatches [pages.yml](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/pages.yml)
 from the default branch to build and deploy the static site through GitHub's
 `github-pages` environment. A default-branch push or version tag starts neither workflow.
