@@ -16,43 +16,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  toolchain:
+    name: Read runtime toolchains
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5 # the five-minute floor; no green run has been measured yet
+    outputs:
+      node_matrix: ${{ steps.matrix.outputs.node_matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the shared reader
+        run: scripts/toolchain.sh --self-test
+      - name: Read defaults and compatibility lanes
+        id: versions
+        run: scripts/toolchain.sh .tool-versions >> "$GITHUB_OUTPUT"
+      - name: Compose the qualification matrix
+        id: matrix
+        env:
+          NODE: ${{ steps.versions.outputs.nodejs }}
+          NODE_LANES: ${{ steps.versions.outputs.nodejs_lanes }}
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
+          import json, os
+          lanes = [{"lane": "primary", "node": os.environ["NODE"]}]
+          lanes.extend({"lane": "minimum", "node": node} for node in json.loads(os.environ["NODE_LANES"]))
+          print("node_matrix=" + json.dumps({"include": lanes}, separators=(",", ":")))
+          PYTHON
+
   verify:
+    needs: toolchain
     name: typecheck, test, build (${{ matrix.lane }})
     runs-on: ubuntu-24.04
     timeout-minutes: 5 # Run 44077968032: the slowest source lane took 39s; under 2.5 minutes, so the 5-minute floor for short jobs.
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - lane: primary
-            node: ""
-          - lane: minimum
-            node: "24.8.0"
+      matrix: ${{ fromJSON(needs.toolchain.outputs.node_matrix) }}
+
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Read the exact Node pin
-        id: runtime
-        env:
-          COMPATIBILITY_NODE: ${{ matrix.node }}
-        run: |
-          version="${COMPATIBILITY_NODE:-$(awk '$1 == "nodejs" {print $2}' .tool-versions)}"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Node requires an exact pin"; exit 1; }
-          echo "node=$version" >> "$GITHUB_OUTPUT"
-      - name: Set up the pinned Node runtime
+      - name: Read runtime versions
+        id: toolchain
+        run: scripts/toolchain.sh .tool-versions >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ steps.runtime.outputs.node }}
+          node-version: ${{ matrix.node }}
           package-manager-cache: false
-      - name: Refuse a different Node version
+
+      - name: Refuse Node runtime drift
         env:
-          EXPECTED_NODE: ${{ steps.runtime.outputs.node }}
-        run: |
-          actual_node=$(node --version)
-          test "$actual_node" = "v$EXPECTED_NODE" || { echo "::error::Node must be exactly $EXPECTED_NODE"; exit 1; }
+          EXPECTED_NODE: ${{ matrix.node }}
+        run: scripts/toolchain.sh --installed "nodejs=$EXPECTED_NODE"
+
       - name: Pin archive tooling
         run: npm install --global npm@11.19.0 --ignore-scripts
       - name: Install with the frozen lockfile
@@ -79,16 +100,21 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Set up Node from the tool versions
+      - name: Read runtime versions
+        id: toolchain
+        run: scripts/toolchain.sh .tool-versions >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: .tool-versions
+          node-version: ${{ steps.toolchain.outputs.nodejs }}
           package-manager-cache: false
-      - name: Refuse a different Node version
-        run: |
-          expected="$(awk '$1 == "nodejs" {print $2}' .tool-versions)"
-          actual_node=$(node --version)
-          test "$actual_node" = "v$expected" || { echo "::error::Node must be exactly $expected"; exit 1; }
+
+      - name: Refuse Node runtime drift
+        env:
+          EXPECTED_NODE: ${{ steps.toolchain.outputs.nodejs }}
+        run: scripts/toolchain.sh --installed "nodejs=$EXPECTED_NODE"
+
       - name: Install with the frozen lockfile
         run: npm ci
       - name: Typecheck the site
@@ -98,7 +124,7 @@ jobs:
 
   qualified:
     if: always()
-    needs: [verify, site]
+    needs: [toolchain, verify, site]
     runs-on: ubuntu-24.04
     timeout-minutes: 5 # Run 44190210592: slowest green 5s; under 2.5 minutes, so the 5-minute floor.
     steps:
