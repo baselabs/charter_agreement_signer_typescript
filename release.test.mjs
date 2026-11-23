@@ -83,7 +83,7 @@ test("every workflow uses bash with pipefail and preserves failing command statu
 test("CI reads exact runtime versions only through the pinned shared reader", () => {
   const reader = new URL("./scripts/toolchain.sh", import.meta.url);
   assert.equal(createHash("sha256").update(readFileSync(reader)).digest("hex"),
-    "b29bfeb6ec4ec8f5b7e3ac3c963f04b6d3c73483172e5bd59ea40f20b102f1eb");
+    "25bbfa023b7f031256428b498fe300fcc460988fea81277072355e4c0d933764");
   assert.equal(statSync(reader).mode & 0o777, 0o755);
   const directory = new URL("./.github/workflows/", import.meta.url);
   const paths = readdirSync(directory).filter((path) => /\.ya?ml$/.test(path));
