@@ -137,10 +137,10 @@ for (const row of sharedTable.cases) {
 
 test("the browser bundle accounts for every shared row", () => {
   assert.deepEqual(missingLimitedRows, [], "ML-DSA browser rows need expected_limited");
-  assert.equal(sharedTable.cases.length, 133);
+  assert.equal(sharedTable.cases.length, 137);
   assert.equal(runRows, sharedTable.cases.length);
   assert.equal(edSuccesses, 17);
-  assert.equal(substrateErrors, 8);
+  assert.equal(substrateErrors, 11);
   process.stdout.write(`Shared browser table: ${runRows} run, ${missingLimitedRows.length} missing limited expectations, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
 });
 
