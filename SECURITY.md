@@ -52,13 +52,15 @@ differing served bytes, a version tag, and deprecated or unpublished versions.
 Finish a held release by approving it on npmjs.com and dispatching the workflow
 again with the same `release_commit`. It stages only what is missing and skips identical
 served versions. OIDC cannot read pending stages; npm refuses a duplicate
-pending stage without replacing it.
+pending stage without replacing it. Read-back compares the downloaded tarball
+with the inspected bytes and verifies the signed `release_commit` before
+exporting the release assets.
 
 The consumer files leave as one `release-assets` artifact. After registry
 read-back, the maintainers' release process tags the published commit as
 `v<version>`, compares the archive with npm's bytes, and creates that GitHub
 release from those files. No workflow creates a release or runs on a tag.
-Download `package.tgz` and `SHA256SUMS` from the matching
+Download `charter-agreement-protocol-signer-<version>.tgz`, the docs archive and `SHA256SUMS` from the matching
 [GitHub release](https://github.com/baselabs/charter_agreement_signer_typescript/releases)
 and run `sha256sum --check SHA256SUMS` in their directory. Compare the
 archive's SHA-512 with npm's integrity and inspect source and provenance for
