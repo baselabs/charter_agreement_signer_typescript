@@ -13,8 +13,10 @@ so new omissions cannot pass silently.
 
 The outcome mapping preserves nested error codes and maps top-level error
 atoms to the TypeScript error member without a code. Every row checks the full result shape, snapshot
-count, and custody count. Ed25519 successes compare the exact compact. Every
-success is checked through public verification, including ML-DSA-65 successes.
+count, and custody count. The operations are descriptor, acceptance, party
+replacement, termination, and receipt signing. A replacement returns a marked
+acceptance. Ed25519 successes compare the exact compact. Every success is
+checked through public verification, including ML-DSA-65 successes.
 
 Node crypto imports the Ed25519 and ML-DSA-65 seeds into private keys and signs
 the prepared bytes. The mixed-order Ed25519 row uses the seed's scalar and
