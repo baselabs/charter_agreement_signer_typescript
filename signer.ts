@@ -48,6 +48,8 @@ export type SigningOptions = {
   algorithm?: string | null;
   limits?: Partial<Limits>;
   profile?: Profile;
+  /** Public key identity to verify before invoking the handle. */
+  keyIdentity?: KeySnapshot;
 };
 
 export type DescriptorOptions = SigningOptions & { predecessor?: DescriptorPredecessor | null };
@@ -143,18 +145,19 @@ async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignEr
   try {
     if (handle === null || typeof handle !== "object") return { error: "invalid_key_handle" };
     const snapshot = await (handle as KeyHandle).keyIdentity(handle);
-    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return { error: "invalid_key_handle" };
-    const { kid, publicKey } = snapshot;
-    if (typeof kid !== "string" || kid.length === 0 || typeof publicKey !== "string") {
-      return { error: "invalid_key_handle" };
-    }
-    return { kid, publicKey };
+    return copyKeyIdentity(snapshot) ?? { error: "invalid_key_handle" };
   } catch (_fault) {
     return { error: "invalid_key_handle" };
   }
 }
 
-const OPTION_KEYS = new Set(["algorithm", "limits", "profile"]);
+function copyKeyIdentity(value: unknown): KeySnapshot | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const { kid, publicKey } = value as Partial<KeySnapshot>;
+  return typeof kid === "string" && kid.length > 0 && typeof publicKey === "string" ? { kid, publicKey } : null;
+}
+
+const OPTION_KEYS = new Set(["algorithm", "limits", "profile", "keyIdentity"]);
 const byteArrayTag = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag)!.get!;
 
 type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
@@ -229,12 +232,16 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     if (typeof algorithm !== "string" || !Object.hasOwn(emissions(), algorithm)) {
       return { error: "invalid_input", code: "algorithm_unsupported" };
     }
-    if (!descriptor) return { ...settings, algorithm };
+    const suppliedIdentity = supplied.keyIdentity;
+    const keyIdentity = copyKeyIdentity(suppliedIdentity);
+    if (suppliedIdentity !== undefined && !keyIdentity) return { error: "invalid_input", code: "invalid_type" };
+    const resolved = { ...settings, algorithm, keyIdentity: keyIdentity ?? undefined };
+    if (!descriptor) return resolved;
     const previous = supplied.predecessor;
     const predecessor = optionMembers(previous, ["digest", "descriptor_digest", "lineage"], {
       lineage: (value) => copyTextList(value),
     });
-    return { ...settings, algorithm, predecessor: predecessor as DescriptorPredecessor | undefined };
+    return { ...resolved, predecessor: predecessor as DescriptorPredecessor | undefined };
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
@@ -277,14 +284,22 @@ async function signPrepared(
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "signing_input_invalid" : "invalid_type" };
   }
-  const snapshot = await resolveKeyIdentity(keyHandle);
-  if ("error" in snapshot) return snapshot;
-
-  const prepared = prepareSigning(kind, snapshot.kid, claims, snapshot.publicKey, retained, {
+  const prepare = ({ kid, publicKey }: KeySnapshot) => prepareSigning(kind, kid, claims, publicKey, retained, {
     algorithm: options.algorithm,
     limits: options.limits,
     profile: options.profile,
   });
+  const declared = options.keyIdentity;
+  const preflight = declared && prepare(declared);
+  if (preflight && !preflight.ok) return prepareError(preflight.code);
+
+  const snapshot = await resolveKeyIdentity(keyHandle);
+  if ("error" in snapshot) return snapshot;
+  if (declared && (snapshot.kid !== declared.kid || snapshot.publicKey !== declared.publicKey)) {
+    return { error: "refused", code: "signing_key_mismatch" };
+  }
+
+  const prepared = preflight ?? prepare(snapshot);
   if (!prepared.ok) return prepareError(prepared.code);
   const input = prepared.plan.input;
 

@@ -229,11 +229,11 @@ resolution, and the closed error vocabulary.
 - The workshop's browser bundle mints Ed25519 and runs the complete workshop
   flow. It cannot verify ML-DSA-65 and refuses that request before signing with
   the top-level `algorithm_unsupported_on_substrate` error.
-- The [shared table](conformance/README.md) runs all 121 rows from the Elixir
-  signer, `charter_agreement_signer` 1.0.0, with its exact source bytes pinned by SHA-256. Real seed
-  keys check result shapes and codes, snapshot and custody counts, 12 exact
+- The [shared table](conformance/README.md) runs all 124 rows from the Elixir
+  signer, with its source commit and exact bytes pinned by SHA-256. Real seed
+  keys check result shapes and codes, snapshot and custody counts, 13 exact
   Ed25519 success compacts, and five ML-DSA-65 successes through verification.
-  All 121 rows run in both Node and the browser bundle with no skips. Eight
+  All 124 rows run in both Node and the browser bundle with no skips. Eight
   shared requests or contexts that need ML-DSA-65 also return a substrate error
   before custody in the browser bundle.
   This compares the recorded Elixir outcomes; it does not run Elixir locally.
@@ -255,10 +255,15 @@ behavior requires a major release. New exports and optional options or fields ar
 change to a closed TypeScript union requires a major release. Compatible bug and security fixes can tighten malformed-input handling.
 Protocol `protocol_revision` is a separate wire identity.
 
-`reference.json` pins the published Elixir signer 1.0.0 archive. The unchanged
-121-row table ships in `conformance/` and is checked byte for byte against it.
-`npm run check:reference` performs that comparison; the native and browser
-suites execute every row. Elixir is not a runtime dependency.
+`reference.json` pins the published Elixir signer 1.0.0 archive.
+`npm run check:reference` confirms that the released rows remain in the
+current table. The native and browser suites execute every current row.
+
+Pass `keyIdentity: { kid, publicKey }` to check a caller-declared identity
+before either handle callback. An unauthorized identity returns
+`{ ok: false, error: "refused", code: "signing_key_mismatch" }`.
+After successful preparation, a different snapshot returns the same
+refusal before the handle signs.
 
 ## Development
 

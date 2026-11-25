@@ -16,9 +16,9 @@ import {
 
 // The digest is from the exact file in the source commit, including whitespace.
 export const SHARED_SOURCE = {
-  commit: "f9a7bc3c8c644afa74cdf95fd2d3b832fa99ce00",
+  commit: "febd47e8df888fe0f9694c859dd26620e9101df5",
   file: "priv/conformance/signer_cases.json",
-  sha256: "3db6f031d6edec92c59e15481fdba884992f95837ea0aefd5bda6b9375c27bb2",
+  sha256: "a4354dfe2bd1477c971e28f4240c4f91f2c72740b0d7b0986b01b819bea13b04",
 } as const;
 
 type Key = {
@@ -184,6 +184,12 @@ export function caseOptions(row: Case, context: unknown): DescriptorOptions {
     if (Array.isArray(value.revisions) && value.revisions.length === 2) {
       value.revisions = { min: value.revisions[0], max: value.revisions[1] };
     }
+  }
+  if (typeof options.key_identity === "string") {
+    const key = sharedTable.keys[options.key_identity];
+    assert.ok(key, row.id);
+    options.keyIdentity = { kid: key.kid, publicKey: key.public_key };
+    delete options.key_identity;
   }
   if (row.kind === "descriptor" && context !== null) options.predecessor = context;
   return options as DescriptorOptions;

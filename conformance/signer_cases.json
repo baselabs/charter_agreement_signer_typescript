@@ -3774,6 +3774,115 @@
         "limits": null,
         "unexpected_option": true
       }
+    },
+    {
+      "claims": {
+        "attestation_hints": [],
+        "descriptor_number": 2,
+        "effective_from": "2026-08-25T10:01:00Z",
+        "extensions": {
+          "critical": {},
+          "optional": {}
+        },
+        "party_id": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "prev_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "protocol_revision": 2,
+        "verification_keys": [
+          {
+            "algorithm": "Ed25519",
+            "key_id": "acceptor-key",
+            "public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+            "status": "active"
+          }
+        ]
+      },
+      "context": "ed-predecessor",
+      "expected": {
+        "code": "signing_key_mismatch",
+        "custody_called": false,
+        "shape": "refused",
+        "snapshot_called": false
+      },
+      "id": "successor-declared-key-refused-before-handle",
+      "key": "ed-acceptor",
+      "kind": "descriptor",
+      "options": {
+        "algorithm": "Ed25519",
+        "key_identity": "ed-acceptor"
+      }
+    },
+    {
+      "claims": {
+        "attestation_hints": [],
+        "descriptor_number": 2,
+        "effective_from": "2026-08-25T10:01:00Z",
+        "extensions": {
+          "critical": {},
+          "optional": {}
+        },
+        "party_id": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "prev_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "protocol_revision": 2,
+        "verification_keys": [
+          {
+            "algorithm": "Ed25519",
+            "key_id": "acceptor-key",
+            "public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+            "status": "active"
+          }
+        ]
+      },
+      "context": "ed-predecessor",
+      "expected": {
+        "code": null,
+        "compact": "eyJhbGciOiJFZDI1NTE5Iiwia2lkIjoiaXNzdWVyLWtleSIsInR5cCI6ImNhcCtwYXJ0eSJ9.eyJhdHRlc3RhdGlvbl9oaW50cyI6W10sImRlc2NyaXB0b3JfbnVtYmVyIjoyLCJlZmZlY3RpdmVfZnJvbSI6IjIwMjYtMDgtMjVUMTA6MDE6MDBaIiwiZXh0ZW5zaW9ucyI6eyJjcml0aWNhbCI6e30sIm9wdGlvbmFsIjp7fX0sInBhcnR5X2lkIjoic2hhLTI1NjpOMDVVYTk5aG9YeE5uQWxDWXV3X3B0aGMyMm0wYmZQaXctSVV2YUc1VTRBIiwicHJldl9kZXNjcmlwdG9yX2RpZ2VzdCI6InNoYS0yNTY6TjA1VWE5OWhvWHhObkFsQ1l1d19wdGhjMjJtMGJmUGl3LUlVdmFHNVU0QSIsInByb3RvY29sX3JldmlzaW9uIjoyLCJ2ZXJpZmljYXRpb25fa2V5cyI6W3siYWxnb3JpdGhtIjoiRWQyNTUxOSIsImtleV9pZCI6ImFjY2VwdG9yLWtleSIsInB1YmxpY19rZXkiOiJnVGwzRHFoOUYxOVdvMVJtdzB4LXpNdU5pcEcwN2plaVhmWVBXNF9KczVRIiwic3RhdHVzIjoiYWN0aXZlIn1dfQ.3cSt5DpaXEQQnj4yfyxlJcm79c-9CwA5ztiyVx2rEa8yX7KuaUPasvtoM3KDonTMTNuw5Cz_La5DFdB0UDoSBg",
+        "custody_called": true,
+        "shape": "ok",
+        "snapshot_called": true
+      },
+      "id": "successor-declared-key-matches-handle",
+      "key": "ed-issuer",
+      "kind": "descriptor",
+      "options": {
+        "algorithm": "Ed25519",
+        "key_identity": "ed-issuer"
+      }
+    },
+    {
+      "claims": {
+        "attestation_hints": [],
+        "descriptor_number": 2,
+        "effective_from": "2026-08-25T10:01:00Z",
+        "extensions": {
+          "critical": {},
+          "optional": {}
+        },
+        "party_id": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "prev_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "protocol_revision": 2,
+        "verification_keys": [
+          {
+            "algorithm": "Ed25519",
+            "key_id": "acceptor-key",
+            "public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+            "status": "active"
+          }
+        ]
+      },
+      "context": "ed-predecessor",
+      "expected": {
+        "code": "signing_key_mismatch",
+        "custody_called": false,
+        "shape": "refused",
+        "snapshot_called": true
+      },
+      "id": "successor-declared-key-differs-from-snapshot",
+      "key": "ed-acceptor",
+      "kind": "descriptor",
+      "options": {
+        "algorithm": "Ed25519",
+        "key_identity": "ed-issuer"
+      }
     }
   ],
   "contexts": {

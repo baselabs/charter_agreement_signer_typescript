@@ -5,6 +5,10 @@ documented here.
 
 ## [Unreleased]
 
+- Validate a caller-declared public key identity before accessing the
+  handle. The shared 124-row table checks the refusal, snapshot mismatch,
+  and successful successor in Node and the browser bundle.
+
 - Read CI runtime defaults and compatibility lanes only through the shared
   toolchain reader, with exact installed-version checks.
 

@@ -57,9 +57,15 @@ try {
     }
     console.log("Elixir reference archive and all 17 corpus files match");
   } else {
-    assert.deepEqual(readFileSync(join(root, "conformance/signer_cases.json")), read("signer_cases.json"));
-    assert.equal(JSON.parse(read("signer_cases.json")).cases.length, 121);
-    console.log("Published Elixir signer reference: all 121 rows byte-identical");
+    const released = JSON.parse(read("signer_cases.json"));
+    const current = JSON.parse(readFileSync(join(root, "conformance/signer_cases.json")));
+    const { cases, ...header } = released;
+    const { cases: currentCases, ...currentHeader } = current;
+    assert.deepEqual(currentHeader, header);
+    assert.equal(cases.length, 121);
+    const byId = new Map(currentCases.map((one) => [one.id, one]));
+    for (const one of cases) assert.deepEqual(byId.get(one.id), one, one.id);
+    console.log(`Released Elixir signer table retained: ${cases.length} rows`);
   }
 } finally {
   rmSync(scratch, { recursive: true, force: true });
