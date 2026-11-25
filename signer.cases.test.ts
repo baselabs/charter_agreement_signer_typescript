@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, test } from "node:test";
-import { SHARED_SOURCE, fixtureBytes, sharedTable, expectedFailure, runCase, verifySuccess } from "./test/signer-cases.ts";
+import { SHARED_SOURCE, fixtureBytes, sharedTable, expectedFailure, runCase, resultKey, verifySuccess } from "./test/signer-cases.ts";
 
 // Every JSON row in this source table can be expressed by the TS signer.
 // Any future exclusions must name the row id and the Elixir-only shape here.
 const unexpressibleRows: Readonly<Record<string, string>> = {};
-const expectedRunRows = 125;
+const expectedRunRows = 133;
 let runRows = 0;
 let edSuccesses = 0;
 let mlSuccesses = 0;
@@ -39,9 +39,9 @@ for (const row of sharedTable.cases) {
       return;
     }
     assert.ok(result.ok, evidence);
-    const compact = result.result[row.kind];
+    const compact = result.result[resultKey(row.kind)];
     assert.equal(typeof compact, "string", evidence);
-    assert.deepEqual(result, { ok: true, result: { [row.kind]: compact } }, evidence);
+    assert.deepEqual(result, { ok: true, result: { [resultKey(row.kind)]: compact } }, evidence);
     if (algorithm === "Ed25519") {
       assert.equal(typeof expected.compact, "string", row.id);
       assert.equal(compact, expected.compact, evidence);
@@ -56,7 +56,7 @@ for (const row of sharedTable.cases) {
 
 after(() => {
   assert.equal(runRows, expectedRunRows);
-  assert.equal(edSuccesses, 13);
+  assert.equal(edSuccesses, 17);
   assert.equal(mlSuccesses, 5);
   process.stdout.write(`Shared table: ${runRows} run, ${Object.keys(unexpressibleRows).length} unexpressible, ${edSuccesses} exact Ed25519 successes, ${mlSuccesses} verified ML-DSA-65 successes.\n`);
 });

@@ -9,6 +9,7 @@ export {
   signDescriptor,
   signReceipt,
   signAcceptance,
+  signPartyReplacement,
   signTermination,
   type KeyHandle,
   type KeySnapshot,

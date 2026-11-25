@@ -361,6 +361,17 @@ export async function signAcceptance(
   return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { acceptance: signed.compact } };
 }
 
+/** Sign the departing party's acceptance. Other parties sign separately. */
+export async function signPartyReplacement(
+  claims: Record<string, unknown>,
+  keyHandle: unknown,
+  chain: ChainView,
+  opts: SigningOptions = {},
+): Promise<SignResult<{ acceptance: string }>> {
+  const signed = await signPrepared("party_replacement", claims, keyHandle, chain, opts);
+  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { acceptance: signed.compact } };
+}
+
 export async function signTermination(
   claims: Record<string, unknown>,
   keyHandle: unknown,

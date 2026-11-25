@@ -7,7 +7,7 @@ commit directly and compares the vendored table with its exact Git blob.
 The digest covers whitespace and JSON values. These seeds are public test
 material.
 
-Run `npm run test:cases` for all 125 Node rows. The runner executes
+Run `npm run test:cases` for all 133 Node rows. The runner executes
 every row in the table. The run count is asserted,
 so new omissions cannot pass silently.
 
@@ -30,7 +30,7 @@ the same four artifact arrays after public verification; Elixir retains a
 verified struct. Raw set contexts pass the four arrays directly.
 
 The browser bundle test uses `expected_limited` where present and the normal
-expectation otherwise. It runs all 125 rows with no skips, compares 13 exact
+expectation otherwise. It runs all 133 rows with no skips, compares 17 exact
 Ed25519 successes, and checks eight substrate errors with zero custody calls.
 Both `ml-successor-ok` and `ml-successor-wrong` use their `expected_limited`
 substrate errors with one snapshot and zero custody calls. It checks result

@@ -5,6 +5,9 @@ documented here.
 
 ## [Unreleased]
 
+- Sign revision-8 quorum acceptances and termination notices, and sign the
+  departing party's assignment acceptance with `signPartyReplacement`.
+
 - Document committed descriptor rotation through the existing signing operation.
   It requires a verifier release that admits revision 8.
 

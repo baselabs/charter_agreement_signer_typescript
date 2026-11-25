@@ -7,7 +7,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { signDescriptor, type KeyHandle } from "./signer.ts";
-import { sharedTable, runCase, expectedFailure, verifySuccess } from "./test/signer-cases.ts";
+import { sharedTable, runCase, expectedFailure, resultKey, verifySuccess } from "./test/signer-cases.ts";
 
 let bundleDirectory: string;
 // The workshop flow (web/flow.ts) is typechecked under the browser target
@@ -124,8 +124,8 @@ for (const row of sharedTable.cases) {
       return;
     }
     assert.ok(result.ok, evidence);
-    const compact = result.result[row.kind];
-    assert.deepEqual(result, { ok: true, result: { [row.kind]: compact } }, evidence);
+    const compact = result.result[resultKey(row.kind)];
+    assert.deepEqual(result, { ok: true, result: { [resultKey(row.kind)]: compact } }, evidence);
     assert.equal(algorithm, "Ed25519", evidence);
     assert.equal(typeof expected.compact, "string", row.id);
     assert.equal(compact, expected.compact, evidence);
@@ -137,9 +137,9 @@ for (const row of sharedTable.cases) {
 
 test("the browser bundle accounts for every shared row", () => {
   assert.deepEqual(missingLimitedRows, [], "ML-DSA browser rows need expected_limited");
-  assert.equal(sharedTable.cases.length, 125);
+  assert.equal(sharedTable.cases.length, 133);
   assert.equal(runRows, sharedTable.cases.length);
-  assert.equal(edSuccesses, 13);
+  assert.equal(edSuccesses, 17);
   assert.equal(substrateErrors, 8);
   process.stdout.write(`Shared browser table: ${runRows} run, ${missingLimitedRows.length} missing limited expectations, ${edSuccesses} exact Ed25519 successes, ${substrateErrors} substrate errors with 0 custody calls.\n`);
 });

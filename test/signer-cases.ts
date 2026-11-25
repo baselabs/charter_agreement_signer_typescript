@@ -10,7 +10,7 @@ import {
   type DescriptorPredecessor,
 } from "@charter-agreement-protocol/verifier";
 import {
-  signAcceptance, signDescriptor, signReceipt, signTermination,
+  signAcceptance, signDescriptor, signPartyReplacement, signReceipt, signTermination,
   type ChainView, type DescriptorOptions, type KeyHandle, type SignResult,
 } from "../signer.ts";
 
@@ -34,7 +34,7 @@ type Expected = {
 };
 export type Case = {
   id: string;
-  kind: "descriptor" | "acceptance" | "termination" | "receipt";
+  kind: "descriptor" | "acceptance" | "party_replacement" | "termination" | "receipt";
   key: string;
   claims: Record<string, unknown>;
   context: unknown;
@@ -197,8 +197,13 @@ export function caseOptions(row: Case, context: unknown): DescriptorOptions {
   return options as DescriptorOptions;
 }
 
-type Signer = Pick<typeof import("../signer.ts"), "signDescriptor" | "signAcceptance" | "signTermination" | "signReceipt">;
-const nativeSigner: Signer = { signDescriptor, signAcceptance, signTermination, signReceipt };
+type Signer = Pick<typeof import("../signer.ts"),
+  "signDescriptor" | "signAcceptance" | "signPartyReplacement" | "signTermination" | "signReceipt">;
+const nativeSigner: Signer = { signDescriptor, signAcceptance, signPartyReplacement, signTermination, signReceipt };
+
+export function resultKey(kind: Case["kind"]) {
+  return kind === "party_replacement" ? "acceptance" : kind;
+}
 
 export async function runCase(row: Case, signer: Signer = nativeSigner) {
   const { handle, counts, algorithm } = realKey(row);
@@ -208,6 +213,7 @@ export async function runCase(row: Case, signer: Signer = nativeSigner) {
   switch (row.kind) {
     case "descriptor": result = await signer.signDescriptor(row.claims, handle, options); break;
     case "acceptance": result = await signer.signAcceptance(row.claims, handle, context as ChainView, options); break;
+    case "party_replacement": result = await signer.signPartyReplacement(row.claims, handle, context as ChainView, options); break;
     case "termination": result = await signer.signTermination(row.claims, handle, context as ChainView, options); break;
     case "receipt": result = await signer.signReceipt(row.claims, handle, context as ChainView | string, options); break;
   }
@@ -221,7 +227,7 @@ export function verifySuccess(row: Case, compact: string, context: unknown,
   const chain = context as ChainView;
   return verifier.verifyChain({
     ...chain,
-    acceptances: row.kind === "acceptance" && !chain.acceptances.includes(compact) ? [...chain.acceptances, compact] : chain.acceptances,
+    acceptances: resultKey(row.kind) === "acceptance" && !chain.acceptances.includes(compact) ? [...chain.acceptances, compact] : chain.acceptances,
     terminations: row.kind === "termination" ? [...chain.terminations, compact] : chain.terminations,
   });
 }
