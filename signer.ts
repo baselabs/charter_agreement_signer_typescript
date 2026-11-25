@@ -160,7 +160,7 @@ const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const byteArrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get!;
 const byteArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")!.get!;
 
-type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
+type ResolvedOptions = Omit<SigningOptions, "algorithm"> & { algorithm: string };
 
 // Read the defined shape once, including inherited and nonenumerable members.
 // Invalid member values stay opaque for the verifier to check synchronously.
@@ -251,9 +251,7 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     const suppliedIdentity = supplied.keyIdentity;
     const keyIdentity = copyKeyIdentity(suppliedIdentity);
     if (suppliedIdentity !== undefined && !keyIdentity) return { error: "invalid_input", code: "invalid_type" };
-    const resolved = { ...settings, algorithm, keyIdentity: keyIdentity ?? undefined };
-    if (!descriptor) return resolved;
-    return { ...resolved, predecessor: supplied.predecessor as DescriptorPredecessor | undefined };
+    return { ...settings, algorithm, keyIdentity: keyIdentity ?? undefined };
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
@@ -273,18 +271,29 @@ function prepareError(code: string): SignError {
   }
 }
 
-async function signPrepared(
+type CapturedSigning = {
+  claims: Record<string, unknown>;
+  options: ResolvedOptions;
+  retained: ReturnType<typeof retainSigningContext>;
+};
+
+function captureSigning(
   kind: SigningKind,
   claims: Record<string, unknown>,
-  keyHandle: unknown,
   context: ChainView | string | null,
   opts: DescriptorOptions,
-): Promise<{ compact: string } | SignError> {
+): CapturedSigning | SignError {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
+  let predecessor: DescriptorPredecessor | null = null;
+  try {
+    if (kind === "descriptor") predecessor = opts.predecessor ?? null;
+  } catch (_fault) {
+    return { error: "invalid_input", code: "invalid_type" };
+  }
   let retained: ReturnType<typeof retainSigningContext>;
   try {
-    const input = kind === "descriptor" ? signingContext(options.predecessor ?? null, ["digest", "descriptor_digest", "lineage"]) :
+    const input = kind === "descriptor" ? signingContext(predecessor, ["digest", "descriptor_digest", "lineage"]) :
       signingContext(context, ["revisions", "acceptances", "descriptors", "terminations"]);
     retained = retainSigningContext(kind, input, {
       algorithm: options.algorithm,
@@ -294,7 +303,6 @@ async function signPrepared(
   } catch (_fault) {
     retained = { ok: false, code: "invalid_type" };
   }
-  context = null;
   try {
     // Caller limits belong to preparation. The entry guard only stops values
     // beyond every JSON limit the verifier can accept.
@@ -303,6 +311,13 @@ async function signPrepared(
     if (!retained.ok) return prepareError(retained.code);
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "signing_input_invalid" : "invalid_type" };
   }
+  return { claims, options, retained };
+}
+
+async function signCaptured(
+  { claims, options, retained }: CapturedSigning,
+  keyHandle: unknown,
+): Promise<{ compact: string } | SignError> {
   const prepare = ({ kid, publicKey }: KeySnapshot) => retained.ok ? retained.value(kid, claims, publicKey) : retained;
   const declared = options.keyIdentity;
   const preflight = declared && prepare(declared);
@@ -351,52 +366,63 @@ async function signPrepared(
   return { compact: finished.compact };
 }
 
-export async function signDescriptor(
+function signArtifact<T>(
+  kind: SigningKind, claims: Record<string, unknown>, keyHandle: unknown, context: ChainView | string | null,
+  opts: DescriptorOptions, result: (compact: string) => T,
+): Promise<SignResult<T>> {
+  const captured = captureSigning(kind, claims, context, opts);
+  return "error" in captured ? Promise.resolve<SignResult<T>>({ ok: false, ...captured }) :
+    artifactResult(signCaptured(captured, keyHandle), result);
+}
+
+async function artifactResult<T>(
+  signing: Promise<{ compact: string } | SignError>, result: (compact: string) => T,
+): Promise<SignResult<T>> {
+  const signed = await signing;
+  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: result(signed.compact) };
+}
+
+export function signDescriptor(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   opts: DescriptorOptions = {},
 ): Promise<SignResult<{ descriptor: string }>> {
-  const signed = await signPrepared("descriptor", claims, keyHandle, null, opts);
-  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { descriptor: signed.compact } };
+  return signArtifact("descriptor", claims, keyHandle, null, opts, (descriptor) => ({ descriptor }));
 }
 
-export async function signReceipt(
+export function signReceipt(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   context: ChainView | string,
   opts: SigningOptions = {},
 ): Promise<SignResult<{ receipt: string }>> {
-  const signed = await signPrepared("receipt", claims, keyHandle, context, opts);
-  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { receipt: signed.compact } };
+  return signArtifact("receipt", claims, keyHandle, context, opts, (receipt) => ({ receipt }));
 }
 
-export async function signAcceptance(
+export function signAcceptance(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   chain: ChainView,
   opts: SigningOptions = {},
 ): Promise<SignResult<{ acceptance: string }>> {
-  const signed = await signPrepared("acceptance", claims, keyHandle, chain, opts);
-  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { acceptance: signed.compact } };
+  return signArtifact("acceptance", claims, keyHandle, chain, opts, (acceptance) => ({ acceptance }));
 }
 
 /** Sign the departing party's acceptance. Other parties sign separately. */
-export async function signPartyReplacement(
+export function signPartyReplacement(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   chain: ChainView,
   opts: SigningOptions = {},
 ): Promise<SignResult<{ acceptance: string }>> {
-  const signed = await signPrepared("party_replacement", claims, keyHandle, chain, opts);
-  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { acceptance: signed.compact } };
+  return signArtifact("party_replacement", claims, keyHandle, chain, opts, (acceptance) => ({ acceptance }));
 }
 
-export async function signTermination(
+export function signTermination(
   claims: Record<string, unknown>,
   keyHandle: unknown,
   chain: ChainView,
   opts: SigningOptions = {},
 ): Promise<SignResult<{ termination: string }>> {
-  const signed = await signPrepared("termination", claims, keyHandle, chain, opts);
-  return "error" in signed ? { ok: false, ...signed } : { ok: true, result: { termination: signed.compact } };
+  return signArtifact("termination", claims, keyHandle, chain, opts, (termination) => ({ termination }));
 }

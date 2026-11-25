@@ -133,6 +133,8 @@ maximums return `invalid_input`/`signing_input_invalid`. Smaller claims reach
 `prepareSigning`, which owns all checks under caller limits, including final
 compact size. Context list copies stop at the item limit and defer that error
 until the verifier reaches the context check.
+The signer finishes capturing chain lists, predecessor lineage, and options
+before either async key callback runs.
 Predecessor lineage uses the verifier's absolute item ceiling independent of
 caller artifact-set limits. The verifier checks immutable
 artifact text under artifact byte limits, separately from parsed claims' string

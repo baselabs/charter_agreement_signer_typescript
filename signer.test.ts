@@ -1291,23 +1291,27 @@ test("entry copies retain limits, profiles and predecessor lineage across callba
   };
   for (const mutateAt of ["identity", "sign"] as const) {
     const opts = { predecessor: structuredClone(root.facts), limits: { max_bytes: 4096 }, profile: { algorithms: ["Ed25519"], revisions: { min: 2, max: 2 } } };
+    const { proxy, revoke } = Proxy.revocable(opts.predecessor, {});
     const mutate = () => {
       (opts.predecessor.lineage as string[]).length = 0;
       opts.limits.max_bytes = 0;
       opts.profile.algorithms[0] = "ML-DSA-65";
       opts.profile.revisions.min = opts.profile.revisions.max = 3;
+      revoke();
     };
     const handle: KeyHandle = {
       async keyIdentity() {
+        await Promise.resolve();
         if (mutateAt === "identity") mutate();
         return { kid: "issuer-key-001", publicKey };
       },
-      sign(message) {
+      async sign(message) {
+        await Promise.resolve();
         if (mutateAt === "sign") mutate();
         return nodeSign(null, message, keys.privateKey);
       },
     };
-    const result = await signDescriptor(successor, handle, opts);
+    const result = await signDescriptor(successor, handle, { ...opts, predecessor: proxy });
     assert.ok(result.ok, `${mutateAt}: ${JSON.stringify(result)}`);
     assert.ok(verifyDescriptor(result.result.descriptor, root.facts).ok);
   }
