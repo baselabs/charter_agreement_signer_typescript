@@ -5,6 +5,9 @@ documented here.
 
 ## [Unreleased]
 
+- Document committed descriptor rotation through the existing signing operation
+  when used with a CAP verifier that admits revision 8.
+
 - Validate a caller-declared public key identity before accessing the
   handle. The shared 125-row table checks the refusal, snapshot mismatch,
   and successful successor in Node and the browser bundle.

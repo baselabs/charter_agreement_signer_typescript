@@ -82,6 +82,20 @@ algorithms are `Ed25519` and `ML-DSA-65`; any other value returns
 `invalid_input` with `code: "algorithm_unsupported"` before either key
 callback runs.
 
+## Descriptor rotation
+
+With a CAP verifier that supports revision 8, use `signDescriptor` with
+`protocol_revision: 8` for a committed descriptor or its successor. Compute
+the successor's complete active key commitment with CAP's `descriptorNextKeyCommitment`
+and put it in the current descriptor's `next_key_commitment` field. To sign
+the successor, supply the current descriptor's verified facts in
+`opts.predecessor` and use a handle for one of its active signing keys.
+
+CAP checks the opening before the handle signs. A failed opening returns
+`descriptor_commitment_mismatch` as an invalid-input code. After signing,
+assemble the unsigned distribution document through CAP and pass it to
+`verifyDescriptorPublication` with the complete signed history.
+
 ## API
 
 | Export | What it does |
