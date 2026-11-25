@@ -78,9 +78,9 @@ argument with `protocol_revision: 3` claims (pure ML-DSA per RFC 9964, the
 empty context — your handle signs the exact message bytes as with Ed25519).
 
 An absent, `undefined` or `null` algorithm selects Ed25519. Explicit
-algorithms are `Ed25519` and `ML-DSA-65`; any other value returns
-`invalid_input` with `code: "algorithm_unsupported"` before either key
-callback runs.
+algorithms are `Ed25519` and `ML-DSA-65`. An unsupported algorithm returns
+`{ ok: false, error: "invalid_input", code: "algorithm_unsupported" }` before
+either key callback runs.
 
 ## Descriptor rotation
 
@@ -158,13 +158,13 @@ const next = await signDescriptor(successorClaims, handle, { predecessor: previo
 For a receipt against bare legacy revision text, the verifier checks the receipt's
 claims against that revision. The revision names no signing key, so the signer
 uses its snapshot for the custody guard; receipt verification reports
-`signature` in `not_verified`. A bare revision-8 charter returns
-`refused` with code `signing_refused` during signing preparation. A chain-backed
-receipt checks the key against
-the issuing party's descriptor keys in the holder's own view.
+`signature` in `not_verified`. Signing against a bare revision-8 charter
+returns `{ ok: false, error: "refused", code: "signing_refused" }`. A
+chain-backed receipt checks the issuing party's descriptor keys in the
+holder's own view.
 
 `opts` is absent or an object with known own keys only: `algorithm`, `limits`,
-and `profile`, plus `predecessor` for `signDescriptor`. Another root shape, an
+`profile` and `keyIdentity`, plus `predecessor` for `signDescriptor`. Another root shape, an
 unknown own key, or a throwing getter returns `invalid_input` with
 `code: "invalid_type"`. Defined members use ordinary property reads, once at
 entry, including inherited and nonenumerable members. Class instances and
