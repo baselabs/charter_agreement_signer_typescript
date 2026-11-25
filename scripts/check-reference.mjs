@@ -93,13 +93,17 @@ try {
   } else {
     const released = JSON.parse(read("signer_cases.json"));
     const current = JSON.parse(readFileSync(join(root, "conformance/signer_cases.json")));
-    const { cases, ...header } = released;
-    const { cases: currentCases, ...currentHeader } = current;
-    assert.deepEqual(currentHeader, header);
-    assert.equal(cases.length, 121);
-    const byId = new Map(currentCases.map((one) => [one.id, one]));
-    for (const one of cases) assert.deepEqual(byId.get(one.id), one, one.id);
-    console.log(`Released Elixir signer table retained: ${cases.length} rows`);
+    assert.deepEqual(Object.keys(current).sort(), Object.keys(released).sort());
+    assert.equal(current.format_version, released.format_version);
+    for (const section of ["keys", "contexts"]) {
+      for (const [name, value] of Object.entries(released[section])) {
+        assert.deepEqual(current[section][name], value, `${section}.${name}`);
+      }
+    }
+    assert.equal(released.cases.length, 121);
+    const byId = new Map(current.cases.map((one) => [one.id, one]));
+    for (const one of released.cases) assert.deepEqual(byId.get(one.id), one, one.id);
+    console.log(`Released Elixir signer table retained: ${released.cases.length} rows`);
   }
 } finally {
   rmSync(scratch, { recursive: true, force: true });

@@ -104,8 +104,9 @@ assemble the unsigned distribution document through CAP and pass it to
 | Export | What it does |
 |---|---|
 | `signDescriptor(claims, handle, opts?)` | Signs a genesis or successor Party Descriptor; successors require `opts.predecessor` |
-| `signReceipt(claims, handle, context, opts?)` | Signs a Receipt against a chain view or bare revision text |
+| `signReceipt(claims, handle, context, opts?)` | Signs a Receipt against a verified chain view or bare legacy revision text |
 | `signAcceptance(claims, handle, chain, opts?)` | Signs an Acceptance using the context the verifier derives from the chain |
+| `signPartyReplacement(claims, handle, chain, opts?)` | Signs the departing party's marked acceptance of a declared replacement |
 | `signTermination(claims, handle, chain, opts?)` | Signs a Termination using the context the verifier derives from the chain |
 | `SigningOptions`, `DescriptorOptions`, `ChainView`, `KeyHandle`, `KeySnapshot`, `SignError`, `SignResult` | Public TypeScript contracts |
 
@@ -138,6 +139,7 @@ Migration from the previous issuing view:
 await signAcceptance(claims, handle, { revisionText, descriptorCompacts, chain }, opts);
 // Now
 await signAcceptance(claims, handle, chain, opts);
+await signPartyReplacement(replacementClaims, handle, chain, opts);
 await signTermination(terminationClaims, handle, chain, opts);
 ```
 
