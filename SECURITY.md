@@ -44,12 +44,13 @@ A report should include:
 The maintainers' release process qualifies each commit before landing.
 After owner approval, infra dispatches the protected
 [Publish workflow](https://github.com/baselabs/charter_agreement_signer_typescript/blob/main/.github/workflows/publish.yml)
-from the default branch. It builds and inspects the exact package archive,
+from the default branch with the full qualified SHA as `release_commit`. It
+validates the input before checkout and builds and inspects that commit’s archive,
 then stages missing bytes with npm provenance through GitHub Actions OIDC.
 It refuses an absent package name (first publication is the owner's decision),
 differing served bytes, a version tag, and deprecated or unpublished versions.
 Finish a held release by approving it on npmjs.com and dispatching the workflow
-again on the same commit. It stages only what is missing and skips identical
+again with the same `release_commit`. It stages only what is missing and skips identical
 served versions. OIDC cannot read pending stages; npm refuses a duplicate
 pending stage without replacing it.
 

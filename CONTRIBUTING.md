@@ -86,13 +86,15 @@ sync. Describe only checks that run and features that ship.
 The version commit stamps the changelog. After qualification and landing, send
 the release operator one message containing the repository, full commit, version, what goes out,
 and the green `qualified` run. The release operator obtains owner approval, dispatches
-`publish.yml` from the default branch. Publication uses the protected `publish`
+`publish.yml` from the default branch with the full qualified SHA as `release_commit`. The
+workflow validates the input before checkout, builds that commit, and loads the
+registry script from the workflow revision. Publication uses the protected `publish`
 environment and npm OIDC trusted publishing; no maintainer-held registry token
 is needed. It refuses a package name the registry lacks: first publication
 is the owner's decision. It also refuses a version tag, differing served
 bytes, and deprecated or unpublished versions.
 
-Finish a held release by dispatching `publish.yml` again on the same commit
+Finish a held release by dispatching `publish.yml` again with the same `release_commit`
 after owner approval on npmjs.com. The job stages only what is missing and
 skips identical served bytes. OIDC cannot list or view pending stages, so
 npm refuses a repeated pending stage without replacement; approve it before
