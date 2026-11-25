@@ -84,9 +84,12 @@ callback runs.
 
 ## Descriptor rotation
 
-With a CAP verifier that supports revision 8, use `signDescriptor` with
-`protocol_revision: 8` for a committed descriptor or its successor. Compute
-the successor's complete active key commitment with CAP's `descriptorNextKeyCommitment`
+Committed rotation requires a release of `@charter-agreement-protocol/verifier`
+that admits revision 8. The pinned verifier 1.0.0 supports revisions 1 through 3.
+
+With a compatible verifier, use `signDescriptor` with `protocol_revision: 8`
+for a committed descriptor or its successor. Compute the successor's complete
+active key commitment with CAP's `descriptorNextKeyCommitment`
 and put it in the current descriptor's `next_key_commitment` field. To sign
 the successor, supply the current descriptor's verified facts in
 `opts.predecessor` and use a handle for one of its active signing keys.
