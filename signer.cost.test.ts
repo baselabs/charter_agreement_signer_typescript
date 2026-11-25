@@ -23,9 +23,10 @@ for (const shape of ["shared limits", "proxy algorithms", "shared claims", "prox
       const shape = ${JSON.stringify(shape)};
       if (shape === "proxy algorithms" || shape === "proxy claims") {
         const value = new Proxy([], { get(target, key) {
-          if (key === "length") { counts.lengths += 1; return 2 ** 53 - 1; }
+          if (key === "length") { counts.lengths += 1; return 2 ** 32; }
           counts.entries += 1;
-          return "Ed25519";
+          if (key === Symbol.iterator) return Array.prototype[Symbol.iterator].bind([]);
+          throw new Error("oversized list entry read");
         } });
         if (shape === "proxy algorithms") options.profile = { algorithms: value };
         else claims.extensions.optional["com.example/value"] = value;
@@ -49,6 +50,7 @@ for (const shape of ["shared limits", "proxy algorithms", "shared claims", "prox
     const observation = JSON.parse(child.stdout);
     assert.equal(observation.result.ok, false);
     assert.equal(observation.result.error, "invalid_input");
+    if (shape === "proxy algorithms") assert.equal(observation.result.code, "invalid_profile");
     assert.equal(observation.counts.identities, 0);
     assert.equal(observation.counts.signs, 0);
     if (shape.startsWith("proxy")) {

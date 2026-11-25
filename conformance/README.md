@@ -41,7 +41,7 @@ The full table runs in Node 24.8.0 and the current Node 24 line. A mismatch
 prints both the Elixir expectation and TS result and counts. The source table
 is never adjusted to make a mismatch pass.
 
-The [CAP companion-signer rule](https://github.com/baselabs/charter_agreement_protocol/blob/6d2a8d09a3a4d81177e9f322bb57155c5126f965/spec/core.md#441-pre-sign-check)
+The [CAP companion-signer rule](https://github.com/baselabs/charter_agreement_protocol/blob/bb726995e1485b105792c61b3c21afddcabf9a09/spec/core.md#441-pre-sign-check)
 defines the order of callbacks. The declared-key successor rows check
 refusal before either callback, refusal after a different snapshot, and
 successful signing with the authorized identity. Both refusals use `signing_key_mismatch`.

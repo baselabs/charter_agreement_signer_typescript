@@ -12,7 +12,7 @@ import {
   decodeCharterRevision,
   emissions,
   finishSigning,
-  prepareSigning,
+  retainSigningContext,
   verifySignature,
   type DescriptorPredecessor,
   type Limits,
@@ -139,16 +139,6 @@ function copyClaims<T>(value: T): T {
   return result as T;
 }
 
-function copyChainView(chain: ChainView): ChainView {
-  if (chain === null || typeof chain !== "object" || Array.isArray(chain) || chain instanceof Number) return chain;
-  const result = Object.create(null);
-  for (const name of ["revisions", "acceptances", "descriptors", "terminations"] as const) {
-    const value = chain[name];
-    if (value !== undefined || name in chain) result[name] = copyTextList(value, true);
-  }
-  return result;
-}
-
 async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignError> {
   try {
     if (handle === null || typeof handle !== "object") return { error: "invalid_key_handle" };
@@ -189,29 +179,44 @@ function optionMembers(value: unknown, names: string[], nested: Record<string, (
 
 function optionAlgorithms(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
-  const length = arrayLength(value);
+  const length = value.length;
+  const registry = algorithmRegistry().map((row) => row.name);
   // A unique registry subset cannot be longer than the registry. Retain an
-  // invalid length for the verifier without reading an unbounded caller list.
-  if (length > MAXIMUM_LIMITS.max_artifact_set_items) return Array(MAXIMUM_LIMITS.max_artifact_set_items + 1);
-  if (length > algorithmRegistry().length) return value;
-  const result: unknown[] = [];
-  for (let i = 0; i < length; i += 1) result.push(value[i]);
+  // invalid profile without reading an unbounded caller list.
+  if (!Number.isInteger(length) || length < 1 || length > registry.length) return [];
+  const result: string[] = [];
+  for (let i = 0; i < length; i += 1) {
+    const name = value[i];
+    if (typeof name !== "string" || !registry.includes(name) || result.includes(name)) return [];
+    result.push(name);
+  }
   return result;
 }
 
-function copyTextList(value: unknown, chain = false): unknown {
-  if (!Array.isArray(value)) return value;
-  const length = arrayLength(value);
-  const maximum = MAXIMUM_LIMITS.max_artifact_set_items;
-  if (length > maximum && (!chain || length !== Object.getOwnPropertyDescriptor(value, "length")?.value)) {
-    throw COPY_LIMIT;
+function optionProfile(value: unknown): Profile | undefined {
+  const names = ["algorithms", "revisions"];
+  const projected = optionMembers(value, names, {
+    revisions: (range) => optionMembers(range, ["min", "max"]),
+  });
+  if (projected !== value) {
+    const profile = projected as Record<string, unknown>;
+    if (profile.algorithms !== undefined && Object.keys(profile).every((name) => names.includes(name))) {
+      profile.algorithms = optionAlgorithms(profile.algorithms);
+    }
   }
-  const result: unknown[] = [];
-  for (let i = 0; i < Math.min(length, maximum); i += 1) result.push(value[i]);
-  // The verifier checks the count before the extra index. Keep that count
-  // without reading the element at the absolute item limit.
-  if (length > maximum) result.length = maximum + 1;
-  return result;
+  return projected as Profile | undefined;
+}
+
+// The verifier reads just these members during its bounded context capture.
+// Preserve ordinary access for inherited and nonenumerable signer inputs.
+function signingContext<T>(value: T, names: readonly string[]): T {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || value instanceof Number) return value;
+  const source = value as Record<string, unknown>;
+  const projected = Object.create(null);
+  for (const name of names) {
+    if (name in source) Object.defineProperty(projected, name, { enumerable: true, get: () => source[name] });
+  }
+  return projected;
 }
 
 function checkOptions(settings: SigningOptions): SignError | null {
@@ -236,10 +241,7 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     };
     const limitsError = checkOptions(settings);
     if (limitsError) return limitsError;
-    settings.profile = optionMembers(supplied.profile, ["algorithms", "revisions"], {
-      algorithms: optionAlgorithms,
-      revisions: (range) => optionMembers(range, ["min", "max"]),
-    }) as Profile | undefined;
+    settings.profile = optionProfile(supplied.profile);
     const profileError = checkOptions(settings);
     if (profileError) return profileError;
     const algorithm = supplied.algorithm ?? defaultEmissionName();
@@ -251,11 +253,7 @@ function signingOptions(opts: unknown, descriptor: boolean): ResolvedOptions | S
     if (suppliedIdentity !== undefined && !keyIdentity) return { error: "invalid_input", code: "invalid_type" };
     const resolved = { ...settings, algorithm, keyIdentity: keyIdentity ?? undefined };
     if (!descriptor) return resolved;
-    const previous = supplied.predecessor;
-    const predecessor = optionMembers(previous, ["digest", "descriptor_digest", "lineage"], {
-      lineage: (value) => copyTextList(value),
-    });
-    return { ...resolved, predecessor: predecessor as DescriptorPredecessor | undefined };
+    return { ...resolved, predecessor: supplied.predecessor as DescriptorPredecessor | undefined };
   } catch (fault) {
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
   }
@@ -284,25 +282,27 @@ async function signPrepared(
 ): Promise<{ compact: string } | SignError> {
   const options = signingOptions(opts, kind === "descriptor");
   if ("error" in options) return options;
-  let retained: DescriptorPredecessor | ChainView | string | null;
+  let retained: ReturnType<typeof retainSigningContext>;
   try {
-    retained = kind === "descriptor" ? options.predecessor ?? null :
-      typeof context === "string" ? context : copyChainView(context as ChainView);
-  } catch (fault) {
-    return { error: "invalid_input", code: fault === COPY_LIMIT ? "limit_exceeded" : "invalid_type" };
+    const input = kind === "descriptor" ? signingContext(options.predecessor ?? null, ["digest", "descriptor_digest", "lineage"]) :
+      signingContext(context, ["revisions", "acceptances", "descriptors", "terminations"]);
+    retained = retainSigningContext(kind, input, {
+      algorithm: options.algorithm,
+      limits: options.limits,
+      profile: options.profile,
+    });
+  } catch (_fault) {
+    retained = { ok: false, code: "invalid_type" };
   }
   try {
     // Caller limits belong to preparation. The entry guard only stops values
     // beyond every JSON limit the verifier can accept.
     claims = copyClaims(claims);
   } catch (fault) {
+    if (!retained.ok) return prepareError(retained.code);
     return { error: "invalid_input", code: fault === COPY_LIMIT ? "signing_input_invalid" : "invalid_type" };
   }
-  const prepare = ({ kid, publicKey }: KeySnapshot) => prepareSigning(kind, kid, claims, publicKey, retained, {
-    algorithm: options.algorithm,
-    limits: options.limits,
-    profile: options.profile,
-  });
+  const prepare = ({ kid, publicKey }: KeySnapshot) => retained.ok ? retained.value(kid, claims, publicKey) : retained;
   const declared = options.keyIdentity;
   const preflight = declared && prepare(declared);
   if (preflight && !preflight.ok) return prepareError(preflight.code);
@@ -323,13 +323,16 @@ async function signPrepared(
   } catch (_fault) {
     return { error: "signing_failed" };
   }
-  if (!ArrayBuffer.isView(signature) || byteArrayTag.call(signature) !== "Uint8Array" ||
-      byteArrayLength.call(signature) > MAXIMUM_LIMITS.max_bytes) {
+  if (!ArrayBuffer.isView(signature) || byteArrayTag.call(signature) !== "Uint8Array") {
     return { error: "signing_failed" };
   }
   let checkedSignature: Buffer;
   try {
-    checkedSignature = Buffer.from(signature);
+    const length = byteArrayLength.call(signature);
+    if (length > MAXIMUM_LIMITS.max_bytes) return { error: "signing_failed" };
+    const bytes = new Uint8Array(length);
+    bytes.set(signature);
+    checkedSignature = Buffer.from(bytes);
   } catch (_signature) {
     return { error: "signing_failed" };
   }

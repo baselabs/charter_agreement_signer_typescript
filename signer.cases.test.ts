@@ -31,6 +31,7 @@ test("replacement list length faults agree with preparation before reading any i
   const key = sharedTable.keys[row.key];
   const set = caseContext(row) as ChainView;
   const { handle, counts } = realKey(row);
+  const options = { keyIdentity: { kid: key.kid, publicKey: key.public_key } };
   assert.ok(prepareSigning("party_replacement", key.kid, row.claims, key.public_key, set).ok);
 
   for (const [length, code] of [
@@ -47,11 +48,43 @@ test("replacement list length faults agree with preparation before reading any i
     assert.deepEqual(prepareSigning("party_replacement", key.kid, row.claims, key.public_key, context),
       { ok: false, code });
     assert.equal(indexedReads, 0);
-    assert.deepEqual(await signPartyReplacement(row.claims, handle, context),
+    assert.deepEqual(await signPartyReplacement(row.claims, handle, context, options),
       { ok: false, error: "invalid_input", code });
     assert.equal(indexedReads, 0);
   }
   assert.deepEqual(counts, { snapshots: 0, custody: 0 });
+});
+
+test("replacement intent and earlier lists precede later length faults", async () => {
+  const row = sharedTable.cases.find((one) => one.id === "signing-assignment-departing-party");
+  assert.ok(row);
+  const key = sharedTable.keys[row.key];
+  const set = caseContext(row) as ChainView;
+  const { handle, counts } = realKey(row);
+  let lengths = 0;
+  let indexedReads = 0;
+  const oversized = new Proxy<string[]>([], { get(target, member) {
+    if (member === "length") { lengths++; return 2 ** 32 - 1; }
+    if (member === "0") { indexedReads++; throw new Error("oversized item read"); }
+    return Reflect.get(target, member);
+  } });
+
+  const missingMarker = { ...set, revisions: oversized };
+  assert.deepEqual(prepareSigning("party_replacement", key.kid, {}, key.public_key, missingMarker),
+    { ok: false, code: "signing_refused" });
+  assert.equal(lengths, 0);
+  assert.deepEqual(await signPartyReplacement({}, handle, missingMarker),
+    { ok: false, error: "refused", code: "signing_refused" });
+  assert.equal(lengths, 1);
+
+  const badFirstItem = { ...set, revisions: [42] as never, terminations: oversized };
+  assert.deepEqual(prepareSigning("party_replacement", key.kid, row.claims, key.public_key, badFirstItem),
+    { ok: false, code: "invalid_type" });
+  assert.deepEqual(await signPartyReplacement(row.claims, handle, badFirstItem),
+    { ok: false, error: "invalid_input", code: "invalid_type" });
+  assert.equal(lengths, 1);
+  assert.equal(indexedReads, 0);
+  assert.deepEqual(counts, { snapshots: 2, custody: 0 });
 });
 
 for (const row of sharedTable.cases) {

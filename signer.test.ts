@@ -1423,35 +1423,26 @@ test("the wrong-key guard rejects bytes changed in place by the signing callback
   }
 });
 
-test("completion uses the signature bytes copied for the guard", async () => {
+test("guard and completion copy real signature bytes without conversion hooks", async () => {
   const keys = ed25519FromSeed(Buffer.alloc(32, 11));
   let signs = 0;
   let reads = 0;
-  let copyReads = 0;
   const handle: KeyHandle = {
     keyIdentity: () => ({ kid: "issuer-key-001", publicKey: derivedPublic(keys.privateKey) }),
     sign(message) {
       signs += 1;
       const signature = new Uint8Array(nodeSign(null, message, keys.privateKey));
-      const length = signature.length;
-      reads = 0;
-      copyReads = Infinity;
-      Object.defineProperty(signature, "length", { get() {
-        reads += 1;
-        if (reads > copyReads) signature[0] ^= 1;
-        return length;
-      } });
-      // Count this runtime's reads for one copy of the real signature.
-      Buffer.from(signature);
-      copyReads = reads;
-      reads = 0;
+      Object.defineProperties(signature, {
+        length: { get() { reads += 1; return 0; } },
+        valueOf: { value() { reads += 1; return new Uint8Array(0); } },
+      });
       return signature;
     },
   };
   for (const { kind, call } of signingCalls(handle)) {
     const result = await call({});
     assert.ok(result.ok, `${kind}: ${JSON.stringify(result)}`);
-    assert.equal(reads, copyReads, kind);
+    assert.equal(reads, 0, kind);
   }
   assert.equal(signs, 4);
 });
@@ -1624,7 +1615,10 @@ test("class instances and throwing nested getters are invalid_type in entry opti
   ];
   for (const [index, opts] of values.entries()) await t.test(String(index), async () => {
     const { handle, counts } = callbackCounts(11, "issuer-key-001");
-    assert.deepEqual(await signDescriptor(genesisClaims("Ed25519", "issuer-key-001", derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey)), handle, opts as never),
+    const kid = "issuer-key-001";
+    const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+    assert.deepEqual(await signDescriptor(genesisClaims("Ed25519", kid, publicKey), handle,
+      { ...opts, keyIdentity: { kid, publicKey } } as never),
       { ok: false, error: "invalid_input", code: "invalid_type" });
     assert.deepEqual(counts, { identities: 0, signs: 0 });
   });
@@ -1868,22 +1862,27 @@ test("claims below the entry guard read later members before preparation", async
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 
-test("context entry copies read lists below the verifier maximum", async () => {
+test("receipt, acceptance and termination retain the verifier's mixed-fault order", async () => {
   let reads = 0;
   const acceptances = Object.defineProperty(Array<string>(2), "0", { get() {
     reads += 1;
     throw new Error("artifact entry");
   } });
   const chain = { ...world.genesisView, acceptances };
-  const { handle, counts } = callbackCounts(11, "issuer-key-001");
+  const kid = "issuer-key-001";
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const { handle, counts } = callbackCounts(11, kid);
   const options = { limits: { max_artifact_set_items: 1 } };
-  for (const result of [
-    await signReceipt(receiptClaims(), handle, chain, options),
-    await signAcceptance(world.genesisIssuerClaims, handle, chain, options),
-    await signTermination({}, handle, chain, options),
-  ]) assert.deepEqual(result, { ok: false, error: "invalid_input", code: "invalid_type" });
-  assert.equal(reads, 3);
-  assert.deepEqual(counts, { identities: 0, signs: 0 });
+  for (const { kind, claims } of signingCalls(handle)) {
+    if (kind === "descriptor") continue;
+    const call = kind === "receipt" ? signReceipt : kind === "acceptance" ? signAcceptance : signTermination;
+    for (const [input, code] of [[{}, "signing_input_invalid"], [claims, "invalid_type"]] as const) {
+      assert.deepEqual(prepareSigning(kind as SigningKind, kid, input, publicKey, chain, options), { ok: false, code });
+      assert.deepEqual(await call(input, handle, chain, options), { ok: false, error: "invalid_input", code });
+    }
+  }
+  assert.equal(reads, 9);
+  assert.deepEqual(counts, { identities: 6, signs: 0 });
 });
 
 test("deep JSON option values reach the verifier without a recursive copy", async () => {
@@ -2022,12 +2021,16 @@ test("overreported predecessor lineage is rejected before reading entries", asyn
     { ok: false, code: "limit_exceeded" });
   assert.deepEqual(await signDescriptor(claims, handle, { predecessor }),
     { ok: false, error: "invalid_input", code: "limit_exceeded" });
+  assert.deepEqual(prepareSigning("descriptor", kid, {}, publicKey, predecessor),
+    { ok: false, code: "signing_input_invalid" });
+  assert.deepEqual(await signDescriptor({}, handle, { predecessor }),
+    { ok: false, error: "invalid_input", code: "signing_input_invalid" });
   assert.equal(indexedReads, 0);
-  assert.deepEqual(counts, { identities: 0, signs: 0 });
+  assert.deepEqual(counts, { identities: 2, signs: 0 });
 });
 
 
-test("invalid algorithm list contents remain opaque for the verifier", async () => {
+test("invalid algorithm profiles reject without traversing entry objects", async () => {
   let value: unknown = "invalid";
   for (let depth = 0; depth < 200; depth += 1) value = { child: value };
   const { handle, counts } = callbackCounts(11, "issuer-key-001");
@@ -2038,6 +2041,46 @@ test("invalid algorithm list contents remain opaque for the verifier", async () 
   assert.ok(!checked.ok);
   assert.deepEqual(await signDescriptor(claims, handle, options as never),
     { ok: false, error: "invalid_input", code: checked.code });
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
+});
+
+test("an invalid profile entry precedes an unreadable later entry", async () => {
+  let reads = 0;
+  const algorithms = Object.defineProperty(["unknown", "Ed25519"], "1", { get() {
+    reads++;
+    throw new Error("later algorithm read");
+  } });
+  const kid = "issuer-key-001";
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = genesisClaims("Ed25519", kid, publicKey);
+  const { handle, counts } = callbackCounts(11, kid);
+  const options = { profile: { algorithms } };
+
+  assert.deepEqual(prepareSigning("descriptor", kid, claims, publicKey, null, options),
+    { ok: false, code: "invalid_profile" });
+  assert.deepEqual(await signDescriptor(claims, handle, options),
+    { ok: false, error: "invalid_input", code: "invalid_profile" });
+  assert.equal(reads, 0);
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
+});
+
+test("unknown profile members precede unreadable algorithm entries", async () => {
+  let reads = 0;
+  const algorithms = Object.defineProperty(["Ed25519"], "0", { get() {
+    reads++;
+    throw new Error("algorithm entry read");
+  } });
+  const kid = "issuer-key-001";
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = genesisClaims("Ed25519", kid, publicKey);
+  const { handle, counts } = callbackCounts(11, kid);
+  const options = { profile: { unexpected: true, algorithms } };
+
+  assert.deepEqual(prepareSigning("descriptor", kid, claims, publicKey, null, options),
+    { ok: false, code: "invalid_profile" });
+  assert.deepEqual(await signDescriptor(claims, handle, options),
+    { ok: false, error: "invalid_input", code: "invalid_profile" });
+  assert.equal(reads, 0);
   assert.deepEqual(counts, { identities: 0, signs: 0 });
 });
 

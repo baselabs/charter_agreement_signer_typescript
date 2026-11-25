@@ -9,8 +9,9 @@ Holder-side companion signer for the
 custody.** You keep the key (HSM, OS keychain, key server) behind a handle
 with two callbacks. The signer resolves limits, profile, and algorithm, copies
 claims and context at entry, and takes one atomic `keyIdentity` snapshot.
-The verifier's `prepareSigning` checks framing, claims, context, profile,
-limits, and the holder's own descriptor key before the callback signs.
+The verifier's `retainSigningContext` captures the context and keeps the
+`prepareSigning` check order for framing, claims, keys, and context. These
+checks finish before the signing callback runs.
 The signer checks the signature against the snapshot public key, then calls
 `finishSigning` to assemble and verify under the retained context and settings.
 
@@ -184,8 +185,7 @@ values, including bigint, symbol, and boxed numbers, retain the verifier's
 `invalid_limits` or `invalid_profile` result. Sparse algorithm lists return
 `invalid_profile`; nonfinite or explicitly undefined limit values return
 `invalid_limits`. A list longer than the algorithm registry cannot be a valid
-unique subset, so its invalid length reaches the verifier without reading its
-entries. The verifier's copy failures are also returned unchanged.
+unique subset, so it returns `invalid_profile` without reading its entries.
 Limits bound the final compact, including signature bytes, and
 every context artifact read; raised limits also apply to assembly and the
 custody guard. Profiles can restrict `algorithms` and/or
