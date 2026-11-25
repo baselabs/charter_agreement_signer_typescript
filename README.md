@@ -73,9 +73,13 @@ if (!result.ok) throw new Error(JSON.stringify(result));
 console.log(result.result.descriptor); // Post-verified compact JWS
 ```
 
-For ML-DSA-65 artifacts pass `{ algorithm: "ML-DSA-65" }` as the options
-argument with `protocol_revision: 3` claims (pure ML-DSA per RFC 9964, the
-empty context — your handle signs the exact message bytes as with Ed25519).
+Legacy artifacts, including receipts, use `Ed25519` at protocol revision 2
+or `ML-DSA-65` at revision 3. With a compatible verifier, revision-8 party
+descriptors, acceptances (including the assignor's marked acceptance from
+`signPartyReplacement`), and termination notices can use either algorithm
+with `protocol_revision: 8`. Select ML-DSA-65 with
+`{ algorithm: "ML-DSA-65" }`. The handle signs the exact message bytes
+with pure ML-DSA and an empty context per RFC 9964.
 
 An absent, `undefined` or `null` algorithm selects Ed25519. Explicit
 algorithms are `Ed25519` and `ML-DSA-65`. An unsupported algorithm returns
@@ -128,7 +132,8 @@ maximums return `invalid_input`/`signing_input_invalid`. Smaller claims reach
 `prepareSigning`, which owns all checks under caller limits, including final
 compact size. Context list copies retain enough entries to exceed every
 supported artifact item limit, letting the verifier return its own result.
-Predecessor lineage has no signer item limit. The verifier checks immutable
+Predecessor lineage uses the verifier's absolute item ceiling independent of
+caller artifact-set limits. The verifier checks immutable
 artifact text under artifact byte limits, separately from parsed claims' string
 limits.
 

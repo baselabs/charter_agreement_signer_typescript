@@ -2003,6 +2003,29 @@ test("the verifier checks claims before the caller's context item limit", async 
   assert.deepEqual(counts, { identities: 3, signs: 0 });
 });
 
+test("overreported predecessor lineage is rejected before reading entries", async () => {
+  const previous = verifyDescriptor(world.issuer.descriptor);
+  assert.ok(previous.ok);
+  const kid = "issuer-key-001";
+  const publicKey = derivedPublic(ed25519FromSeed(Buffer.alloc(32, 11)).privateKey);
+  const claims = { ...genesisClaims("Ed25519", kid, publicKey), descriptor_number: 2,
+    party_id: previous.facts.party_id, prev_descriptor_digest: previous.facts.descriptor_digest };
+  const { handle, counts } = callbackCounts(11, kid);
+  let indexedReads = 0;
+  const lineage = new Proxy<string[]>([], { get(target, member) {
+    if (member === "length") return 2 ** 32 - 1;
+    if (member === "0") { indexedReads++; throw new Error("oversized item read"); }
+    return Reflect.get(target, member);
+  } });
+  const predecessor = { ...previous.facts, lineage };
+  assert.deepEqual(prepareSigning("descriptor", kid, claims, publicKey, predecessor),
+    { ok: false, code: "limit_exceeded" });
+  assert.deepEqual(await signDescriptor(claims, handle, { predecessor }),
+    { ok: false, error: "invalid_input", code: "limit_exceeded" });
+  assert.equal(indexedReads, 0);
+  assert.deepEqual(counts, { identities: 0, signs: 0 });
+});
+
 
 test("invalid algorithm list contents remain opaque for the verifier", async () => {
   let value: unknown = "invalid";

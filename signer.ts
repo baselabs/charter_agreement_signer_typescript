@@ -65,6 +65,12 @@ type CopyFrame = {
   depth: number;
 };
 
+function arrayLength(list: unknown[]): number {
+  const length = list.length;
+  if (!Number.isInteger(length) || length < 0 || length > 0xffff_ffff) throw new TypeError("invalid_type");
+  return length;
+}
+
 // Read one child at a time without recursion or array constructor hooks.
 // Only ancestors are retained, so repeated objects get separate copies.
 function copyClaims<T>(value: T): T {
@@ -104,8 +110,7 @@ function copyClaims<T>(value: T): T {
       }
       keys = Object.keys(item);
     }
-    const size = array ? item.length : keys!.length;
-    if (!Number.isSafeInteger(size) || size < 0 || array && size > 2 ** 32 - 1) throw new TypeError("invalid_type");
+    const size = array ? arrayLength(item) : keys!.length;
     if (size > (array ? limits.max_array_items : limits.max_object_members)) {
       throw COPY_LIMIT;
     }
@@ -135,10 +140,13 @@ function copyClaims<T>(value: T): T {
 }
 
 function copyChainView(chain: ChainView): ChainView {
-  const names = ["revisions", "acceptances", "descriptors", "terminations"];
-  const lists = Object.fromEntries(names.map((name) => [name, (value: unknown) =>
-    copyTextList(value, MAXIMUM_LIMITS.max_artifact_set_items + 1)]));
-  return optionMembers(chain, names, lists) as ChainView;
+  if (chain === null || typeof chain !== "object" || Array.isArray(chain) || chain instanceof Number) return chain;
+  const result = Object.create(null);
+  for (const name of ["revisions", "acceptances", "descriptors", "terminations"] as const) {
+    const value = chain[name];
+    if (value !== undefined || name in chain) result[name] = copyTextList(value, true);
+  }
+  return result;
 }
 
 async function resolveKeyIdentity(handle: unknown): Promise<KeySnapshot | SignError> {
@@ -158,7 +166,9 @@ function copyKeyIdentity(value: unknown): KeySnapshot | null {
 }
 
 const OPTION_KEYS = new Set(["algorithm", "limits", "profile", "keyIdentity"]);
-const byteArrayTag = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag)!.get!;
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const byteArrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get!;
+const byteArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")!.get!;
 
 type ResolvedOptions = Omit<DescriptorOptions, "algorithm"> & { algorithm: string };
 
@@ -179,8 +189,7 @@ function optionMembers(value: unknown, names: string[], nested: Record<string, (
 
 function optionAlgorithms(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
-  const length = value.length;
-  if (!Number.isSafeInteger(length) || length < 0) throw new TypeError("invalid_type");
+  const length = arrayLength(value);
   // A unique registry subset cannot be longer than the registry. Retain an
   // invalid length for the verifier without reading an unbounded caller list.
   if (length > MAXIMUM_LIMITS.max_artifact_set_items) return Array(MAXIMUM_LIMITS.max_artifact_set_items + 1);
@@ -190,13 +199,18 @@ function optionAlgorithms(value: unknown): unknown {
   return result;
 }
 
-function copyTextList(value: unknown, maximum = 2 ** 32 - 1): unknown {
+function copyTextList(value: unknown, chain = false): unknown {
   if (!Array.isArray(value)) return value;
-  const length = value.length;
-  // A plain array cannot represent a length above 2^32 - 1.
-  if (!Number.isSafeInteger(length) || length < 0 || length > 2 ** 32 - 1) throw new TypeError("invalid_type");
+  const length = arrayLength(value);
+  const maximum = MAXIMUM_LIMITS.max_artifact_set_items;
+  if (length > maximum && (!chain || length !== Object.getOwnPropertyDescriptor(value, "length")?.value)) {
+    throw COPY_LIMIT;
+  }
   const result: unknown[] = [];
   for (let i = 0; i < Math.min(length, maximum); i += 1) result.push(value[i]);
+  // The verifier checks the count before the extra index. Keep that count
+  // without reading the element at the absolute item limit.
+  if (length > maximum) result.length = maximum + 1;
   return result;
 }
 
@@ -309,7 +323,8 @@ async function signPrepared(
   } catch (_fault) {
     return { error: "signing_failed" };
   }
-  if (!ArrayBuffer.isView(signature) || byteArrayTag.call(signature) !== "Uint8Array") {
+  if (!ArrayBuffer.isView(signature) || byteArrayTag.call(signature) !== "Uint8Array" ||
+      byteArrayLength.call(signature) > MAXIMUM_LIMITS.max_bytes) {
     return { error: "signing_failed" };
   }
   let checkedSignature: Buffer;
