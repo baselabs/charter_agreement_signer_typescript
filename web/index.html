@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CAP signer — form a charter in your browser</title>
-<meta name="description" content="The holder-side companion signer for the Charter Agreement Protocol: two parties, four signed artifact kinds, byte-exact evidence of what was agreed. Private keys never enter the library — this demo generates both parties' keys in your browser.">
+<meta name="description" content="The holder-side companion signer for the Charter Agreement Protocol: byte-exact evidence of charter revisions, party assent, termination, and receipts. Private keys never enter the library — this demo generates both parties' keys in your browser.">
 <link rel="stylesheet" href="./styles.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%230f172a'/%3E%3Ctext x='24' y='32' font-family='Arial,sans-serif' font-size='19' font-weight='800' text-anchor='middle' fill='%23a78bfa'%3E[CAP]%3C/text%3E%3C/svg%3E">
 </head>
@@ -44,7 +44,7 @@
     <p class="kicker"><span class="wordmark hero-mark"><i>[</i>CAP<i>]</i></span> Charter Agreement Protocol · the signer package</p>
     <h1>When two agents strike a deal,<br><em>what evidence survives the handshake?</em></h1>
     <p class="lede">OAuth says who called. Even a signed contract only says what was promised on paper.
-    CAP is the missing evidence layer for bilateral agreements — including agent commerce: the
+    CAP provides verifiable agreement evidence for parties, including software agents. The
     parties sign <strong>byte-exact descriptors, acceptances, and receipts</strong>, so “which terms
     governed this action?” is answered by cryptography, not chat logs. <strong>CAP verifies. It never
     authorizes.</strong> And the private keys never enter this library — this page generates both
@@ -73,7 +73,7 @@
   <div class="why-head">
     <h2>The piece contracts leave out</h2>
     <p>A signed PDF proves someone agreed to <em>some</em> text. It does not prove which exact
-    revision governed a given action, that both parties accepted those bytes, or that the acting
+    revision governed a given action, that the charter’s acceptance requirements were met for those bytes, or that the acting
     key still belonged to its party.</p>
   </div>
   <div class="grid3">
@@ -85,10 +85,9 @@
       acceptances bind <strong>those exact bytes</strong>. Rewriting one character breaks the chain.</p>
     </article>
     <article class="whycard">
-      <h3>Bilateral, not self-said.</h3>
-      <p class="pain">One party attesting to its own agreement is marketing, not evidence.</p>
-      <p class="answer"><svg class="ic"><use href="#i-check"/></svg> Acceptance is <strong>two signatures over the same
-      digest</strong>, each bound to the party’s key history via its descriptor.</p>
+      <h3>Signed party assent</h3>
+      <p class="pain">An acceptance records one party’s assent to an exact revision.</p>
+      <p class="answer"><svg class="ic"><use href="#i-check"/></svg> Each acceptance binds the revision digest to a party’s key history. Legacy charters require both parties’ assent. Revision 8 applies the charter’s quorum and assignment rules.</p>
     </article>
     <article class="whycard">
       <h3>It never decides for you.</h3>
@@ -178,7 +177,7 @@
   <div class="lifecycle">
 <a class="lstep" href="https://baselabs.github.io/agent_blueprint_protocol/"><span class="lmark"><i>[</i>ABP<i>]</i></span><div><b>Define the agent</b><small>Blueprint Core + Deployment Manifest — identity, bounds that only narrow, evidence commitments, pinned to one release digest</small></div></a>
     <div class="larrow">→</div>
-<span class="lstep now"><span class="lmark"><i>[</i>CAP<i>]</i></span><div><b>Agree the terms</b><small>Charter revisions bind ABP release digests (abp_bindings); both parties sign acceptances, and the issuing party signs each receipt with the action’s deployment digest</small></div></span>
+<span class="lstep now"><span class="lmark"><i>[</i>CAP<i>]</i></span><div><b>Agree the terms</b><small>Charter revisions bind ABP release digests (abp_bindings); parties sign acceptances under the charter’s rules, and the issuing party signs each receipt with the action’s deployment digest</small></div></span>
     <div class="larrow">→</div>
 <a class="lstep" href="https://baselabs.github.io/bounded_authority_protocol/"><span class="lmark"><i>[</i>BAP<i>]</i></span><div><b>Authorize each request</b><small>Issuer-signed grants + holder proofs govern every call, per request — the authority layer over OAuth</small></div></a>
   </div>
@@ -198,13 +197,14 @@
 </section>
 
 <section class="wrap" id="signers">
-  <div class="sec-head"><h2>The four signers</h2></div>
+  <div class="sec-head"><h2>Signing functions</h2></div>
   <table class="signers">
     <thead><tr><th>Function</th><th>Artifact</th><th>Post-sign verify</th></tr></thead>
     <tbody>
       <tr><td><code>signDescriptor</code></td><td>party descriptor (<code>cap+party</code>) — key history, transitions, fork evidence</td><td><code>verifyDescriptor</code></td></tr>
-      <tr><td><code>signAcceptance</code></td><td>acceptance (<code>cap+acceptance</code>) — bilateral assent to exact bytes</td><td><code>verifyAcceptance</code></td></tr>
-      <tr><td><code>signTermination</code></td><td>termination notice (<code>cap+termination</code>) — closure at a pure UTC instant</td><td><code>verifyTermination</code></td></tr>
+      <tr><td><code>signAcceptance</code></td><td>acceptance (<code>cap+acceptance</code>) — one party’s assent to exact bytes</td><td><code>verifyAcceptance</code></td></tr>
+      <tr><td><code>signPartyReplacement</code></td><td>acceptance (<code>cap+acceptance</code>) — a departing party’s assent to a declared replacement</td><td><code>verifyAcceptance</code></td></tr>
+      <tr><td><code>signTermination</code></td><td>termination notice (<code>cap+termination</code>) — one party’s notice for a stated UTC instant</td><td><code>verifyTermination</code></td></tr>
       <tr><td><code>signReceipt</code></td><td>receipt (<code>cap+receipt</code>) — an action bound to revision coordinates</td><td><code>verifyReceipt</code></td></tr>
     </tbody>
   </table>

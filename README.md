@@ -155,10 +155,12 @@ if (!previous.ok) throw new Error(previous.code);
 const next = await signDescriptor(successorClaims, handle, { predecessor: previous.facts });
 ```
 
-For a receipt against bare revision text, the verifier checks the receipt's
+For a receipt against bare legacy revision text, the verifier checks the receipt's
 claims against that revision. The revision names no signing key, so the signer
 uses its snapshot for the custody guard; receipt verification reports
-`signature` in `not_verified`. A chain-backed receipt checks the key against
+`signature` in `not_verified`. A bare revision-8 charter returns
+`refused` with code `signing_refused` during signing preparation. A chain-backed
+receipt checks the key against
 the issuing party's descriptor keys in the holder's own view.
 
 `opts` is absent or an object with known own keys only: `algorithm`, `limits`,
@@ -218,7 +220,7 @@ passes that identity to `prepareSigning`. With a declared identity and
 descriptor membership evidence, CAP can refuse an unauthorized key before
 either callback. After successful declared-identity preparation, the signer
 takes one atomic snapshot and compares it with the prepared identity before
-calling `sign`. A bare-revision receipt checks key shape and runtime support
+calling `sign`. A receipt against a bare legacy revision checks key shape and runtime support
 during preparation, then compares the snapshot before signing.
 
 A malformed context type returns
