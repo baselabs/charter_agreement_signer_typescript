@@ -137,7 +137,7 @@ for (const row of sharedTable.cases) {
 
 test("the browser bundle accounts for every shared row", () => {
   assert.deepEqual(missingLimitedRows, [], "ML-DSA browser rows need expected_limited");
-  assert.equal(sharedTable.cases.length, 124);
+  assert.equal(sharedTable.cases.length, 125);
   assert.equal(runRows, sharedTable.cases.length);
   assert.equal(edSuccesses, 13);
   assert.equal(substrateErrors, 8);

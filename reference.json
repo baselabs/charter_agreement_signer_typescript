@@ -8,5 +8,9 @@
     "version": "1.0.0",
     "commit": "153225ac0fe91bdebd65225a812f018838d3d86e",
     "integrity": "sha512-fjiqnSgXzCFM1cYMWmIurcLc7OObwpQzmd9TNy8uzoPS4cxMKZ3o4kXcH90DRv9WYtOn/PLu3ffkjOa8bJe3GA=="
+  },
+  "corpus_source": {
+    "commit": "2a33b6777ba5b67ce180f1765dc9060eedcec801",
+    "sha256": "97256767da0678e738c2a578cd072c566f3b853107eaed1a74b5ee91e96af73d"
   }
 }

@@ -194,8 +194,15 @@ from another JavaScript realm. The verifier rejects Ed25519 public keys with
 noncanonical y coordinates, no curve point, x = 0 with the sign bit set, or
 small order as `invalid_key_handle` when they are snapshot keys. Descriptor
 claims containing such keys can fail earlier with `signing_input_invalid`.
-All pre-sign rejections leave the `sign` callback untouched; the atomic key
-snapshot precedes `prepareSigning`. A malformed context type returns
+Without a declared identity, the signer takes one atomic key snapshot and
+passes that identity to `prepareSigning`. With a declared identity and
+descriptor membership evidence, CAP can refuse an unauthorized key before
+either callback. After successful declared-identity preparation, the signer
+takes one atomic snapshot and compares it with the prepared identity before
+calling `sign`. A bare-revision receipt checks key shape and runtime support
+during preparation, then compares the snapshot before signing.
+
+A malformed context type returns
 `invalid_input`/`invalid_type`. For otherwise valid descriptor claims, predecessor
 errors return `invalid_input` with these codes before signing:
 
@@ -229,11 +236,11 @@ resolution, and the closed error vocabulary.
 - The workshop's browser bundle mints Ed25519 and runs the complete workshop
   flow. It cannot verify ML-DSA-65 and refuses that request before signing with
   the top-level `algorithm_unsupported_on_substrate` error.
-- The [shared table](conformance/README.md) runs all 124 rows from the Elixir
+- The [shared table](conformance/README.md) runs all 125 rows from the Elixir
   signer, with its source commit and exact bytes pinned by SHA-256. Real seed
   keys check result shapes and codes, snapshot and custody counts, 13 exact
   Ed25519 success compacts, and five ML-DSA-65 successes through verification.
-  All 124 rows run in both Node and the browser bundle with no skips. Eight
+  All 125 rows run in both Node and the browser bundle with no skips. Eight
   shared requests or contexts that need ML-DSA-65 also return a substrate error
   before custody in the browser bundle.
   This compares the recorded Elixir outcomes; it does not run Elixir locally.
@@ -256,11 +263,12 @@ change to a closed TypeScript union requires a major release. Compatible bug and
 Protocol `protocol_revision` is a separate wire identity.
 
 `reference.json` pins the published Elixir signer 1.0.0 archive.
-`npm run check:reference` confirms that the released rows remain in the
-current table. The native and browser suites execute every current row.
+`npm run check:reference` fetches the pinned Elixir commit directly,
+compares the vendored table to its Git blob byte for byte, and confirms
+that the published reference rows remain in the current table. The native and browser suites execute every current row.
 
 Pass `keyIdentity: { kid, publicKey }` to check a caller-declared identity
-before either handle callback. An unauthorized identity returns
+before either handle callback. With descriptor membership evidence, an unauthorized identity returns
 `{ ok: false, error: "refused", code: "signing_key_mismatch" }`.
 After successful preparation, a different snapshot returns the same
 refusal before the handle signs.

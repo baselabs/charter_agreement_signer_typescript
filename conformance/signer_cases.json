@@ -3883,6 +3883,42 @@
         "algorithm": "Ed25519",
         "key_identity": "ed-issuer"
       }
+    },
+    {
+      "claims": {
+        "attestation_hints": [],
+        "descriptor_number": 2,
+        "effective_from": "2026-08-25T10:01:00Z",
+        "extensions": {
+          "critical": {},
+          "optional": {}
+        },
+        "party_id": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "prev_descriptor_digest": "sha-256:N05Ua99hoXxNnAlCYuw_pthc22m0bfPiw-IUvaG5U4A",
+        "protocol_revision": 2,
+        "verification_keys": [
+          {
+            "algorithm": "Ed25519",
+            "key_id": "acceptor-key",
+            "public_key": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+            "status": "active"
+          }
+        ]
+      },
+      "context": "ed-predecessor",
+      "expected": {
+        "code": "invalid_type",
+        "custody_called": false,
+        "shape": "invalid_input",
+        "snapshot_called": false
+      },
+      "id": "successor-declared-key-malformed",
+      "key": "ed-issuer",
+      "kind": "descriptor",
+      "options": {
+        "algorithm": "Ed25519",
+        "key_identity": null
+      }
     }
   ],
   "contexts": {

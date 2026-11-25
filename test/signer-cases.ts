@@ -14,12 +14,9 @@ import {
   type ChainView, type DescriptorOptions, type KeyHandle, type SignResult,
 } from "../signer.ts";
 
-// The digest is from the exact file in the source commit, including whitespace.
-export const SHARED_SOURCE = {
-  commit: "febd47e8df888fe0f9694c859dd26620e9101df5",
-  file: "priv/conformance/signer_cases.json",
-  sha256: "a4354dfe2bd1477c971e28f4240c4f91f2c72740b0d7b0986b01b819bea13b04",
-} as const;
+// The digest covers the exact source blob, including whitespace.
+const reference = JSON.parse(readFileSync(new URL("../reference.json", import.meta.url), "utf8"));
+export const SHARED_SOURCE: { readonly commit: string; readonly sha256: string } = reference.corpus_source;
 
 type Key = {
   algorithm: "Ed25519" | "ML-DSA-65";
@@ -185,10 +182,15 @@ export function caseOptions(row: Case, context: unknown): DescriptorOptions {
       value.revisions = { min: value.revisions[0], max: value.revisions[1] };
     }
   }
-  if (typeof options.key_identity === "string") {
-    const key = sharedTable.keys[options.key_identity];
-    assert.ok(key, row.id);
-    options.keyIdentity = { kid: key.kid, publicKey: key.public_key };
+  if (Object.hasOwn(options, "key_identity")) {
+    const identity = options.key_identity;
+    if (typeof identity === "string") {
+      const key = sharedTable.keys[identity];
+      assert.ok(key, row.id);
+      options.keyIdentity = { kid: key.kid, publicKey: key.public_key };
+    } else {
+      options.keyIdentity = identity;
+    }
     delete options.key_identity;
   }
   if (row.kind === "descriptor" && context !== null) options.predecessor = context;

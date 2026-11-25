@@ -2,18 +2,17 @@
 
 `signer_cases.json` is copied byte for byte from the CAS Elixir signer. The
 source commit and SHA-256 are recorded once in
-[`SHARED_SOURCE`](../test/signer-cases.ts). The digest covers whitespace as well as
-JSON values. These seeds are public test material.
+[`reference.json`](../reference.json). Qualification fetches that
+commit directly and compares the vendored table with its exact Git blob.
+The digest covers whitespace and JSON values. These seeds are public test
+material.
 
-Run `npm run test:cases` for all 124 Node rows. The runner is
-[`signer.cases.test.ts`](../signer.cases.test.ts); its empty
-`unexpressibleRows` map is the explicit list of Elixir-only shapes, keyed by
-row id with a reason. This table has no such rows. The run count is asserted,
+Run `npm run test:cases` for all 125 Node rows. The runner executes
+every row in the table. The run count is asserted,
 so new omissions cannot pass silently.
 
-The outcome mapping table is in [`signer-cases.ts`](../test/signer-cases.ts).
-It preserves nested error codes and maps top-level error atoms to the TS
-error member without a code. Every row checks the full result shape, snapshot
+The outcome mapping preserves nested error codes and maps top-level error
+atoms to the TypeScript error member without a code. Every row checks the full result shape, snapshot
 count, and custody count. Ed25519 successes compare the exact compact. Every
 success is checked through public verification, including ML-DSA-65 successes.
 
@@ -31,7 +30,7 @@ the same four artifact arrays after public verification; Elixir retains a
 verified struct. Raw set contexts pass the four arrays directly.
 
 The browser bundle test uses `expected_limited` where present and the normal
-expectation otherwise. It runs all 124 rows with no skips, compares 13 exact
+expectation otherwise. It runs all 125 rows with no skips, compares 13 exact
 Ed25519 successes, and checks eight substrate errors with zero custody calls.
 Both `ml-successor-ok` and `ml-successor-wrong` use their `expected_limited`
 substrate errors with one snapshot and zero custody calls. It checks result
@@ -40,7 +39,10 @@ The full table runs in Node 24.8.0 and the current Node 24 line. A mismatch
 prints both the Elixir expectation and TS result and counts. The source table
 is never adjusted to make a mismatch pass.
 
-The [CAP companion-signer rule](https://github.com/baselabs/charter_agreement_protocol/blob/d5da96ca02215f322fb39c47e4c9af15d19b87b8/spec/core.md#441-pre-sign-check)
+The [CAP companion-signer rule](https://github.com/baselabs/charter_agreement_protocol/blob/9ed71344df72635353d3d979659ca5d83aa0a137/spec/core.md#441-pre-sign-check)
 defines the order of callbacks. The declared-key successor rows check
 refusal before either callback, refusal after a different snapshot, and
 successful signing with the authorized identity. Both refusals use `signing_key_mismatch`.
+
+An explicit null identity returns `invalid_input` / `invalid_type` with zero
+identity and signing calls.
