@@ -131,8 +131,8 @@ Claims copies use an iterative traversal guarded by the verifier's maximum
 supported JSON bounds, rather than the caller's limits. Values beyond those
 maximums return `invalid_input`/`signing_input_invalid`. Smaller claims reach
 `prepareSigning`, which owns all checks under caller limits, including final
-compact size. Context list copies retain enough entries to exceed every
-supported artifact item limit, letting the verifier return its own result.
+compact size. Context list copies stop at the item limit and defer that error
+until the verifier reaches the context check.
 Predecessor lineage uses the verifier's absolute item ceiling independent of
 caller artifact-set limits. The verifier checks immutable
 artifact text under artifact byte limits, separately from parsed claims' string

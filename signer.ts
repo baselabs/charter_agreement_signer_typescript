@@ -294,6 +294,7 @@ async function signPrepared(
   } catch (_fault) {
     retained = { ok: false, code: "invalid_type" };
   }
+  context = null;
   try {
     // Caller limits belong to preparation. The entry guard only stops values
     // beyond every JSON limit the verifier can accept.
