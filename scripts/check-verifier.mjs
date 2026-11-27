@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const candidate = JSON.parse(readFileSync(join(root, "reference.json"), "utf8")).verifier;
-assert.equal(candidate?.version, "1.0.0", "record the real staged verifier identity first");
+const lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
+const baseline = lock.packages["node_modules/@charter-agreement-protocol/verifier"];
+assert.equal(candidate.version, baseline.version);
+assert.equal(candidate.integrity, baseline.integrity);
 assert.match(candidate.commit, /^[0-9a-f]{40}$/);
 assert.match(candidate.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/);
 const scratch = mkdtempSync(join(tmpdir(), "signer-verifier-"));
@@ -39,13 +42,13 @@ try {
   }
   run(["npm", "ci"], signer);
   run(["npm", "install", "--no-save", "--package-lock=false", "--ignore-scripts", archive], signer);
-  assert.equal(JSON.parse(readFileSync(join(signer, "node_modules/@charter-agreement-protocol/verifier/package.json"), "utf8")).version, "1.0.0");
+  assert.equal(JSON.parse(readFileSync(join(signer, "node_modules/@charter-agreement-protocol/verifier/package.json"), "utf8")).version, candidate.version);
   for (const script of ["typecheck", "test", "typecheck:web", "build:site", "check:reference", "check:package"]) {
     run(["npm", "run", script], signer, { ...baseEnv, CAP_VERIFIER_ARCHIVE: archive });
   }
   const digest = (path) => createHash("sha512").update(readFileSync(path)).digest("hex");
-  assert.equal(digest(join(signer, "artifacts/package.tgz")), digest(join(root, "artifacts/package.tgz")), "one signer archive must pass against both verifier lines");
-  console.log("Same signer package passed the complete suite and installed consumer against verifier 1.0.0");
+  assert.equal(digest(join(signer, "artifacts/package.tgz")), digest(join(root, "artifacts/package.tgz")), "registry and source verifier checks must qualify the same signer archive");
+  console.log(`Same signer package passed the complete suite and installed consumer against verifier ${candidate.version}`);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

@@ -10,7 +10,7 @@ custody.** You keep the key (HSM, OS keychain, key server) behind a handle
 with two callbacks. The signer resolves limits, profile, and algorithm, copies
 claims and context at entry, and takes one atomic `keyIdentity` snapshot.
 The verifier's `retainSigningContext` captures the context and keeps the
-`prepareSigning` check order for framing, claims, keys, and context. These
+`prepareSigning` check order for framing, claims, keys, scope, and context. These
 checks finish before the signing callback runs.
 The signer checks the signature against the snapshot public key, then calls
 `finishSigning` to assemble and verify under the retained context and settings.
@@ -18,19 +18,17 @@ The signer checks the signature against the snapshot public key, then calls
 ## Install
 
 ```console
-npm install @charter-agreement-protocol/signer@^1.0.0
+npm install @charter-agreement-protocol/signer@^1.1.0
 ```
 
 
 The maintainers' release process publishes inspected archives to npm with
 provenance through GitHub Actions trusted publishing after owner approval.
 
-Version **1.0.0** requires Node >= 24.8.0 and
-`@charter-agreement-protocol/verifier` `^0.7.0 || ^1.0.0`, for its pre-sign API.
-Both compatibility lines are checked. The registry lock pins published 0.7.0;
-`reference.json` records the verifier 1.0 commit and exact staged archive integrity.
-Compatibility does not extend the verifier's security-maintenance policy.
-Verifier 1.0.0 is now served by npm; update existing 0.7 locks to maintained 1.x.
+Version **1.1.0** requires Node >= 24.8.0 and
+`@charter-agreement-protocol/verifier` `^2.0.0`. The registry lock and
+`reference.json` pin the verifier 2.0.0 archive. Qualification also rebuilds
+the pinned verifier commit and compares the archive integrity.
 
 ## Quickstart
 
@@ -75,7 +73,7 @@ console.log(result.result.descriptor); // Post-verified compact JWS
 ```
 
 Legacy artifacts, including receipts, use `Ed25519` at protocol revision 2
-or `ML-DSA-65` at revision 3. With a compatible verifier, revision-8 party
+or `ML-DSA-65` at revision 3. Revision-8 party
 descriptors, acceptances (including the assignor's marked acceptance from
 `signPartyReplacement`), and termination notices can use either algorithm
 with `protocol_revision: 8`. Select ML-DSA-65 with
@@ -89,10 +87,7 @@ either key callback runs.
 
 ## Descriptor rotation
 
-Committed rotation requires a release of `@charter-agreement-protocol/verifier`
-that admits revision 8. The pinned verifier 1.0.0 supports revisions 1 through 3.
-
-With a compatible verifier, use `signDescriptor` with `protocol_revision: 8`
+Use `signDescriptor` with `protocol_revision: 8`
 for a committed descriptor or its successor. Compute the successor's complete
 active key commitment with CAP's `descriptorNextKeyCommitment`
 and put it in the current descriptor's `next_key_commitment` field. To sign
@@ -103,6 +98,46 @@ CAP checks the opening before the handle signs. A failed opening returns
 `descriptor_commitment_mismatch` as an invalid-input code. After signing,
 assemble the unsigned distribution document through CAP and pass it to
 `verifyDescriptorPublication` with the complete signed history.
+
+## Signer scopes
+
+A revision-8 descriptor can declare `signing_scopes` by role, active key
+thumbprint, and artifact kind. CAP checks the relevant pinned descriptor
+before custody signs. If the key is outside scope, acceptance, assignment
+acceptance, termination and receipt signing return
+`{ ok: false, error: "refused", code: "signing_refused" }`.
+Descriptor succession checks the predecessor for the `descriptor` kind
+under a role and returns `invalid_input` with `descriptor_chain_invalid`
+on a scope failure.
+
+## Inspect a signed receipt
+
+Retain the raw chain view used when signing. Call the verifier with the
+returned receipt and an optional tagged grant digest from your own records.
+
+```ts
+import { signReceipt } from "@charter-agreement-protocol/signer";
+import { inspectReceipt } from "@charter-agreement-protocol/verifier";
+
+const signed = await signReceipt(claims, handle, chain, options);
+if (signed.ok) {
+  const checked = inspectReceipt(signed.result.receipt, chain, grantReference, {
+    limits: options.limits,
+    profile: options.profile,
+  });
+  if (checked.ok) {
+    const { provenance, grant, agreement } = checked.inspection;
+    const exported = JSON.stringify(checked.inspection);
+  }
+}
+```
+
+Use `null` or omit the grant reference when you hold none. Read
+`provenance.scope_status` and `provenance.signer_thumbprint` for the signing key's
+scope evidence. `grant` compares the digests, while `agreement` compares the
+receipt claims with the revision governing at `occurred_at`. The portable
+record holds the original signed segments and decoded claims. Handle the
+export as receipt evidence.
 
 ## API
 
@@ -210,7 +245,7 @@ Errors are closed:
 |---|---|
 | `invalid_input`, with `code` | The verifier rejected claims, context, limits, or profile, or options were invalid |
 | `invalid_key_handle` | The snapshot callback failed, its shape was malformed, or the verifier returned `signing_key_invalid` |
-| `refused`, with `code: "signing_refused"` | The claims contradict the holder's own verified view (R1–R3) |
+| `refused`, with `code: "signing_refused"` | The claims contradict the holder's own verified view (R1–R3), or the key is outside the descriptor scope for the role and kind |
 | `refused`, with `code: "signing_key_mismatch"` | The kid, public key bytes, or key algorithm does not match the holder's own descriptor key |
 | `algorithm_unsupported_on_substrate` | The runtime cannot verify the selected algorithm or a context artifact |
 | `signing_failed` | The callback failed, returned a malformed signature, or failed the wrong-key guard |

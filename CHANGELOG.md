@@ -5,6 +5,10 @@ documented here.
 
 ## [Unreleased]
 
+- Require verifier 2.0.0 for revision-8 scope checks before custody. Document
+  receipt inspection with the verifier and cover the round-trip in Node and
+  the browser bundle.
+
 - Sign revision-8 quorum acceptances and termination notices, and sign the
   departing party's assignment acceptance with `signPartyReplacement`.
 
@@ -12,8 +16,8 @@ documented here.
   algorithm counts before reading entries, and copy signatures without
   invoking caller conversion methods.
 
-- Document committed descriptor rotation through the existing signing operation.
-  It requires a verifier release that admits revision 8.
+- Document revision-8 committed descriptor rotation through the existing
+  signing operation.
 
 - Validate a caller-declared public key identity before accessing the
   handle. The shared 137-row table checks the refusal, snapshot mismatch,

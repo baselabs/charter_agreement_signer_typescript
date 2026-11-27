@@ -1,6 +1,6 @@
 {
   "name": "@charter-agreement-protocol/signer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Holder-side companion signer for the Charter Agreement Protocol (CAP) in TypeScript - key custody only: an atomic key snapshot, the sign callback, the wrong-key guard, and post-sign verification, with framing, claims, context, key matching, limits, profile, and completion delegated to the @charter-agreement-protocol/verifier pre-sign API. CAP verifies; it never authorizes; this signer signs, it never verifies third-party artifacts or takes custody.",
   "license": "Apache-2.0",
   "type": "module",
@@ -44,7 +44,7 @@
     "check:verifier": "node scripts/check-verifier.mjs"
   },
   "dependencies": {
-    "@charter-agreement-protocol/verifier": "^0.7.0 || ^1.0.0"
+    "@charter-agreement-protocol/verifier": "^2.0.0"
   },
   "devDependencies": {
     "@noble/ed25519": "^3.2.0",

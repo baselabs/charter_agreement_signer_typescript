@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, test } from "node:test";
-import { prepareSigning } from "@charter-agreement-protocol/verifier";
+import { inspectReceipt, prepareSigning } from "@charter-agreement-protocol/verifier";
 import { signPartyReplacement, type ChainView } from "./signer.ts";
 import { SHARED_SOURCE, fixtureBytes, sharedTable, caseContext, expectedFailure, realKey, runCase, resultKey, verifySuccess } from "./test/signer-cases.ts";
 
@@ -23,6 +23,18 @@ test("the shared table matches the Elixir source bytes and accounts for every ro
     assert.ok(ids.includes(id), id);
     assert.ok(reason.length > 0, id);
   }
+});
+
+test("the signed chain receipt reproduces the shared compact in CAP inspection", async () => {
+  const row = sharedTable.cases.find((one) => one.id === "ed-receipt-chain-ok");
+  assert.ok(row);
+  const { result, context } = await runCase(row);
+  assert.ok(result.ok);
+  const checked = inspectReceipt(result.result.receipt, context as ChainView);
+  assert.ok(checked.ok, JSON.stringify(checked));
+  const { signed, grant } = checked.inspection;
+  assert.equal([signed.protected_segment, signed.payload_segment, signed.signature_segment].join("."), row.expected.compact);
+  assert.equal(grant.status, "not_verified");
 });
 
 test("replacement list length faults agree with preparation before reading any index", async () => {

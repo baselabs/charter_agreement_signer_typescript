@@ -17,6 +17,8 @@ count, and custody count. The operations are descriptor, acceptance, party
 replacement, termination, and receipt signing. A replacement returns a marked
 acceptance. Ed25519 successes compare the exact compact. Every success is
 checked through public verification, including ML-DSA-65 successes.
+The runner also inspects the chain receipt with CAP and reconstructs the
+exact compact from the three retained segments.
 
 Node crypto imports the Ed25519 and ML-DSA-65 seeds into private keys and signs
 the prepared bytes. The mixed-order Ed25519 row uses the seed's scalar and

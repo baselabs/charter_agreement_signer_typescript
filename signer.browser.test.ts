@@ -18,11 +18,12 @@ type BundledWorkshop = new () => {
   form(): Promise<unknown>;
   accept(): Promise<unknown>;
   signActionReceipt(): Promise<unknown>;
+  receipt: string;
   view(): { revisions: string[]; acceptances: string[]; descriptors: string[]; terminations: string[] };
   tampered(kind: string): Promise<object>;
 };
 let browser: typeof import("./index.ts") &
-  Pick<typeof import("@charter-agreement-protocol/verifier"), "verifyDescriptor" | "verifyReceipt" | "verifyChain"> & {
+  Pick<typeof import("@charter-agreement-protocol/verifier"), "inspectReceipt" | "verifyDescriptor" | "verifyReceipt" | "verifyChain"> & {
     Workshop: BundledWorkshop;
   };
 
@@ -32,7 +33,7 @@ before(async () => {
   const outfile = join(bundleDirectory, "signer.mjs");
   await build({
     stdin: {
-      contents: 'export * from "./index.ts"; export { verifyDescriptor, verifyReceipt, verifyChain } from "@charter-agreement-protocol/verifier"; export { Workshop } from "./web/flow.ts";',
+      contents: 'export * from "./index.ts"; export { inspectReceipt, verifyDescriptor, verifyReceipt, verifyChain } from "@charter-agreement-protocol/verifier"; export { Workshop } from "./web/flow.ts";',
       resolveDir: root,
     },
     absWorkingDir: root,
@@ -152,6 +153,12 @@ test("the workshop flow, bundled with the site's browser shims, forms, accepts, 
   assert.deepEqual(await ws.signActionReceipt(), { ok: true });
   const verified = browser.verifyChain(ws.view());
   assert.ok(verified.ok, JSON.stringify(verified));
+  const result = browser.inspectReceipt(ws.receipt, ws.view());
+  assert.ok(result.ok, JSON.stringify(result));
+  const { signed, grant, agreement } = result.inspection;
+  assert.equal([signed.protected_segment, signed.payload_segment, signed.signature_segment].join("."), ws.receipt);
+  assert.equal(grant.reason, "grant_reference_missing");
+  assert.equal(agreement.status, "matches");
   // The evidence checks: rewritten terms and an impostor key fail; the
   // charter without the receipt still verifies.
   for (const [kind, expectOk] of [["revision", false], ["descriptor", false], ["receipt", true]] as const) {

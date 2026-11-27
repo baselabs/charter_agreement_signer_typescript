@@ -1,7 +1,7 @@
 // CAP never authorizes.
 // The holder supplies one key snapshot and signs the verifier's prepared
 // message. The verifier owns framing, claims, context, limits, profile,
-// key matching, assembly, and completion. This package keeps custody and
+// key matching, signer scope, assembly, and completion. This package keeps custody and
 // the wrong-key guard.
 
 import {
@@ -390,6 +390,7 @@ export function signDescriptor(
   return signArtifact("descriptor", claims, keyHandle, null, opts, (descriptor) => ({ descriptor }));
 }
 
+/** Sign a receipt using CAP's issuing key and scope checks. Retain the chain for inspectReceipt. */
 export function signReceipt(
   claims: Record<string, unknown>,
   keyHandle: unknown,

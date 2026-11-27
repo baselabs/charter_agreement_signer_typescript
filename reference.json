@@ -5,9 +5,9 @@
   "corpus_path": "priv/conformance",
   "verification_semantics": 6,
   "verifier": {
-    "version": "1.0.0",
-    "commit": "153225ac0fe91bdebd65225a812f018838d3d86e",
-    "integrity": "sha512-fjiqnSgXzCFM1cYMWmIurcLc7OObwpQzmd9TNy8uzoPS4cxMKZ3o4kXcH90DRv9WYtOn/PLu3ffkjOa8bJe3GA=="
+    "version": "2.0.0",
+    "commit": "711860dc7de72ed3f9eafd217abb2257dd2671d1",
+    "integrity": "sha512-IkMlHPvGY2aaoN/xtwb8cHNyT3ehqRQWXEtBKwQDy98beCcXVgfnQFvQznYgwrdLP09rMiMYgOMA9ozJQdqNWA=="
   },
   "corpus_source": {
     "commit": "5d9ed0ab91e6e154deb6b13dd77701e5ab22dfa2",

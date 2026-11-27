@@ -26,7 +26,9 @@ import {
   terminationSigningInput,
   receiptSigningInput,
   assembleCompact,
+  inspectReceipt,
   revisionDigest,
+  signerThumbprint,
   verifyAcceptance,
   verifyChain,
   verifyDescriptor,
@@ -959,6 +961,125 @@ test("signReceipt: bound context happy path, post-verified", async () => {
   assert.equal(header.alg, "Ed25519");
   const verified = verifyReceipt(result.result.receipt, world.genesisView);
   assert.ok(verified.ok, JSON.stringify(verified));
+});
+
+test("scoped signing refuses an active out-of-scope key before custody and preserves matched evidence", async () => {
+  const issuer = callbackCounts(11, "issuer-key-001");
+  const outside = callbackCounts(13, "outside");
+  const declaration = (kid: string, seed: number) => ({
+    key_id: kid, algorithm: "Ed25519", status: "active",
+    public_key: derivedPublic(ed25519FromSeed(Buffer.alloc(32, seed)).privateKey),
+  });
+  const allowedKey = declaration("issuer-key-001", 11);
+  const outsideKey = declaration("outside", 13);
+  const thumbprint = signerThumbprint(allowedKey);
+  const outsideThumbprint = signerThumbprint(outsideKey);
+  assert.ok(thumbprint.ok);
+  assert.ok(outsideThumbprint.ok);
+
+  const [, payload] = world.issuer.descriptor.split(".");
+  const descriptorClaims = {
+    ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
+    protocol_revision: 8,
+    verification_keys: [allowedKey, outsideKey],
+    signing_scopes: [
+      { role: "acceptor", signers: [{ key_thumbprint: outsideThumbprint.value, artifact_kinds: ["receipt"] }] },
+      { role: "issuer", signers: [{
+        key_thumbprint: thumbprint.value, artifact_kinds: ["acceptance", "descriptor", "receipt", "termination"],
+      }] },
+    ],
+  };
+  const root = await signDescriptor(descriptorClaims, issuer.handle);
+  assert.ok(root.ok, JSON.stringify(root));
+  const predecessor = verifyDescriptor(root.result.descriptor);
+  assert.ok(predecessor.ok, JSON.stringify(predecessor));
+  const pin = predecessor.facts.descriptor_digest as string;
+  const roles = ["acceptor", "issuer"];
+  const seedRevision = JSON.parse(world.genesisText);
+  const text = canonical({
+    ...seedRevision,
+    protocol_revision: 8,
+    parties: [world.acceptor.pdd, pin].map((party_descriptor_digest, index) =>
+      ({ party_descriptor_digest, role: roles[index], participation: "acceptor" })),
+    acceptance_quorum: { roles, threshold: 2 },
+    termination_rules: { reason_codes: ["mutual"], quorum: { roles: ["issuer"], threshold: 1 } },
+  });
+  const revision = revisionDigest(text);
+  assert.ok(revision.ok, JSON.stringify(revision));
+  const pending = {
+    revisions: [text], acceptances: [], descriptors: [root.result.descriptor, world.acceptor.descriptor], terminations: [],
+  };
+  const acceptance = { ...world.genesisIssuerClaims, protocol_revision: 8,
+    charter_id: revision.digest, revision_digest: revision.digest, party_descriptor_digest: pin };
+  const issuerVote = await signAcceptance(acceptance, issuer.handle, pending);
+  assert.ok(issuerVote.ok, JSON.stringify(issuerVote));
+  const peerVote = await signAcceptance({ ...acceptance, party_role: "acceptor",
+    party_descriptor_digest: world.acceptor.pdd }, world.acceptor.handle, pending);
+  assert.ok(peerVote.ok, JSON.stringify(peerVote));
+  const chain = { ...pending, acceptances: [issuerVote.result.acceptance, peerVote.result.acceptance] };
+  const verified = verifyChain(chain);
+  assert.ok(verified.ok, JSON.stringify(verified));
+  assert.deepEqual(verified.facts.acceptedDigests, [revision.digest]);
+
+  const termination = { protocol_revision: 8, charter_id: revision.digest, governing_revision_digest: revision.digest,
+    party_descriptor_digest: pin, party_role: "issuer", reason_code: "mutual",
+    issued_at: "2026-08-25T13:05:00Z", effective_at: "2026-08-25T13:15:00Z" };
+  const receipt = { ...receiptClaims(), charter_id: revision.digest, revision_digest: revision.digest };
+  const successor = { ...descriptorClaims, descriptor_number: 2, party_id: pin,
+    prev_descriptor_digest: pin, effective_from: "2026-08-26T10:00:00Z" };
+  const refused = { ok: false, error: "refused", code: "signing_refused" };
+  assert.deepEqual(await signAcceptance(acceptance, outside.handle, chain), refused);
+  assert.deepEqual(await signTermination(termination, outside.handle, chain), refused);
+  assert.deepEqual(await signReceipt(receipt, outside.handle, chain), refused);
+  assert.deepEqual(await signReceipt(receipt, outside.handle, chain,
+    { keyIdentity: { kid: outsideKey.key_id, publicKey: outsideKey.public_key } }), refused);
+  assert.deepEqual(await signDescriptor(successor, outside.handle, { predecessor: predecessor.facts }),
+    { ok: false, error: "invalid_input", code: "descriptor_chain_invalid" });
+  assert.deepEqual(outside.counts, { identities: 4, signs: 0 });
+
+  const rotated = await signDescriptor(successor, issuer.handle, { predecessor: predecessor.facts });
+  assert.ok(rotated.ok, JSON.stringify(rotated));
+  assert.ok(verifyDescriptor(rotated.result.descriptor, predecessor.facts).ok);
+  const notice = await signTermination(termination, issuer.handle, chain);
+  assert.ok(notice.ok, JSON.stringify(notice));
+  const voteFacts = verifyAcceptance(issuerVote.result.acceptance, text, [root.result.descriptor]);
+  const noticeFacts = verifyTermination(notice.result.termination, text, [root.result.descriptor]);
+  for (const evidence of [voteFacts, noticeFacts]) {
+    assert.ok(evidence.ok, JSON.stringify(evidence));
+    assert.equal(evidence.facts.scope_status, "matched");
+    assert.equal(evidence.facts.signer_thumbprint, thumbprint.value);
+  }
+
+  const signed = await signReceipt(receipt, issuer.handle, chain);
+  assert.ok(signed.ok, JSON.stringify(signed));
+  const compact = signed.result.receipt;
+  const reference = digestOf("example receipt reference bytes");
+  const inspected = inspectReceipt(compact, chain, reference);
+  assert.ok(inspected.ok, JSON.stringify(inspected));
+  const { signed: segments, claims, provenance, grant, agreement } = inspected.inspection;
+  assert.deepEqual(JSON.parse(JSON.stringify(claims)), receipt);
+  assert.equal(provenance.scope_status, "matched");
+  assert.equal(provenance.signer_thumbprint, thumbprint.value);
+  assert.equal(provenance.revision_status, "verified");
+  assert.equal(grant.status, "matches");
+  assert.equal(agreement.status, "matches");
+  const { protected_segment: header, payload_segment: body, signature_segment: signature } = segments;
+  assert.equal([header, body, signature].join("."), compact);
+
+  const withoutReference = inspectReceipt(compact, chain);
+  assert.ok(withoutReference.ok);
+  assert.equal(withoutReference.inspection.grant.reason, "grant_reference_missing");
+  const differentReference = inspectReceipt(compact, chain, revision.digest);
+  assert.ok(differentReference.ok);
+  assert.equal(differentReference.inspection.grant.status, "differs");
+  assert.equal(differentReference.inspection.agreement.status, "matches");
+  const closed = inspectReceipt(compact, { ...chain, terminations: [notice.result.termination] }, reference);
+  assert.ok(closed.ok, JSON.stringify(closed));
+  assert.equal(closed.inspection.grant.status, "matches");
+  assert.equal(closed.inspection.agreement.reason, "no_governing_revision");
+  assert.deepEqual(inspectReceipt(compact, chain, "invalid"), { ok: false, code: "digest_encoding_invalid" });
+  const tampered = [header, body, (signature[0] === "A" ? "B" : "A") + signature.slice(1)].join(".");
+  assert.deepEqual(inspectReceipt(tampered, chain, reference), { ok: false, code: "signature_invalid" });
 });
 
 test("malformed claims are rejected before the key is used (the producer claims gate)", async () => {
