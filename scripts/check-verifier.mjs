@@ -34,7 +34,7 @@ try {
   assert.ok(isAbsolute(archive) && existsSync(archive));
   assert.equal(`sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`, candidate.integrity, "verifier bytes must equal the exact staged archive");
   const signer = join(scratch, "signer");
-  for (const path of ["package.json", "package-lock.json", "index.ts", "signer.ts", "signer.test.ts", "signer.browser.test.ts", "signer.cases.test.ts", "signer.cost.test.ts", "tsconfig.json", "tsconfig.build.json", "tsconfig.web.json", "test", "conformance", "web", "scripts", "reference.json", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "LICENSE", "NOTICE"]) {
+  for (const path of ["package.json", "package-lock.json", "index.ts", "signer.ts", "signer.test.ts", "signer.browser.test.ts", "signer.cases.test.ts", "signer.cost.test.ts", "tsconfig.json", "tsconfig.build.json", "tsconfig.web.json", "test", "conformance", "web", "scripts", "reference.json", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "IPR.md", "LICENSE", "NOTICE"]) {
     cpSync(join(root, path), join(signer, path), { recursive: true });
   }
   run(["npm", "ci"], signer);

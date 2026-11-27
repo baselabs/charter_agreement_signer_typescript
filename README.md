@@ -380,4 +380,5 @@ from the default branch to build and deploy the static site through GitHub's
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache-2.0, maintained by BaseLabs Holdings LLC. See LICENSE and NOTICE, and IPR.md
+for contributions.
