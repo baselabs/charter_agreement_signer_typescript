@@ -10,7 +10,7 @@
     "integrity": "sha512-IkMlHPvGY2aaoN/xtwb8cHNyT3ehqRQWXEtBKwQDy98beCcXVgfnQFvQznYgwrdLP09rMiMYgOMA9ozJQdqNWA=="
   },
   "corpus_source": {
-    "commit": "5d9ed0ab91e6e154deb6b13dd77701e5ab22dfa2",
-    "sha256": "8fe2319b63191b8f2c18677ff358a019a50a232531b2df04c56e06e038a64681"
+    "commit": "69a466dba3a99ce73fe97ba7857ee01396f92b4d",
+    "sha256": "ec07f7361c3177b26378462fb12602b6ec6d457e91b7a84ad4fdf4a250376e38"
   }
 }

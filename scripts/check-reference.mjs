@@ -102,7 +102,21 @@ try {
     }
     assert.equal(released.cases.length, 121);
     const byId = new Map(current.cases.map((one) => [one.id, one]));
-    for (const one of released.cases) assert.deepEqual(byId.get(one.id), one, one.id);
+    for (const one of released.cases) {
+      const vendored = byId.get(one.id);
+      if (reference.version === "1.0.0" && one.id === "acceptance-unheld-successor") {
+        // CAP 1.3 refuses a proposed predecessor before looking up descriptor history.
+        assert.deepEqual(one.expected, {
+          code: "acceptance_claims_mismatch", custody_called: false, shape: "invalid_input", snapshot_called: true,
+        }, one.id);
+        assert.deepEqual(vendored, {
+          ...one,
+          expected: { ...one.expected, code: "signing_refused", shape: "refused" },
+        }, one.id);
+      } else {
+        assert.deepEqual(vendored, one, one.id);
+      }
+    }
     console.log(`Released Elixir signer table retained: ${released.cases.length} rows`);
   }
 } finally {

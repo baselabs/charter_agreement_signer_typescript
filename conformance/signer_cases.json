@@ -2172,9 +2172,9 @@
       },
       "context": "ed-unheld",
       "expected": {
-        "code": "acceptance_claims_mismatch",
+        "code": "signing_refused",
         "custody_called": false,
-        "shape": "invalid_input",
+        "shape": "refused",
         "snapshot_called": true
       },
       "id": "acceptance-unheld-successor",
