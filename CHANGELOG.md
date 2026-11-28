@@ -5,6 +5,8 @@ documented here.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-28
+
 - Require verifier 2.0.0 for revision-8 scope checks before custody. Document
   receipt inspection with the verifier and cover the round-trip in Node and
   the browser bundle.
